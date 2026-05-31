@@ -3,8 +3,10 @@ import React, { useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions
 } from 'react-native';
-import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS, AVATARS } from '../config/theme';
+import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS } from '../config/theme';
 import PlayerAvatar from '../components/PlayerAvatar';
+import GameGlyph from '../components/ui/GameGlyph';
+import { tapFeedback } from '../services/feedback';
 
 const { width, height } = Dimensions.get('window');
 
@@ -96,7 +98,10 @@ export default function ResultsScreen({ navigation, route }) {
           <Text style={[styles.winnerName, { color: winnerColor?.primary || COLORS.accent }]}>
             {winner?.name || 'Player'}
           </Text>
-          <Text style={styles.gameLabel}>{game.emoji} {game.title}</Text>
+          <View style={styles.gameLabelRow}>
+            <GameGlyph gameId={game.id} size={28} />
+            <Text style={styles.gameLabel}>{game.title}</Text>
+          </View>
         </Animated.View>
 
         {/* Podium */}
@@ -120,12 +125,18 @@ export default function ResultsScreen({ navigation, route }) {
         {/* Actions */}
         <View style={styles.actions}>
           <TouchableOpacity style={styles.playAgainBtn}
-            onPress={() => navigation.navigate('Lobby', { game, user })}>
-            <Text style={styles.playAgainText}>🔄 Play Again</Text>
+            onPress={() => {
+              tapFeedback();
+              navigation.navigate('Lobby', { game, user });
+            }}>
+            <Text style={styles.playAgainText}>Play Again</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.homeBtn}
-            onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.homeBtnText}>🏠 Home</Text>
+            onPress={() => {
+              tapFeedback();
+              navigation.navigate('Home');
+            }}>
+            <Text style={styles.homeBtnText}>Home</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -144,6 +155,7 @@ const styles = StyleSheet.create({
   },
   resultLabel: { fontFamily: FONTS.heading, fontSize: SIZES.fontXxl, color: COLORS.textPrimary },
   winnerName: { fontFamily: FONTS.heading, fontSize: SIZES.fontXxl },
+  gameLabelRow: { flexDirection: 'row', alignItems: 'center', gap: SIZES.xs },
   gameLabel: { fontFamily: FONTS.bodyRegular, fontSize: SIZES.fontMd, color: COLORS.textSecondary },
   podium: {
     width: '100%', backgroundColor: COLORS.bgCard, borderRadius: SIZES.radiusXl,

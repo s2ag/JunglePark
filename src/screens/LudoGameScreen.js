@@ -13,6 +13,7 @@ import LudoBoard from '../components/ludo/LudoBoard';
 import Dice from '../components/Dice';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
+import { tapFeedback, successFeedback } from '../services/feedback';
 
 const { width } = Dimensions.get('window');
 
@@ -77,6 +78,7 @@ export default function LudoGameScreen({ navigation, route }) {
 
   const handleRoll = async () => {
     if (!isMyTurn || rolling || !gameState || gameState.diceRolled) return;
+    tapFeedback();
     setRolling(true);
     const value = rollDice();
     const activeUid = isLocal ? currentPlayerUid : user.uid;
@@ -108,12 +110,14 @@ export default function LudoGameScreen({ navigation, route }) {
 
   const handleTokenPress = async (tokenId) => {
     if (!isMyTurn || !gameState || !gameState.diceRolled) return;
+    tapFeedback();
     const activeUid = isLocal ? currentPlayerUid : user.uid;
     const movable = getMovableTokens(gameState, activeUid, gameState.diceValue);
     if (!movable.find((t) => t.id === tokenId)) return;
 
     const newState = moveToken(gameState, activeUid, tokenId, gameState.diceValue);
     if (newState.winner) {
+      successFeedback();
       if (isLocal) {
         navigation.replace('Results', {
           winnerId: newState.winner,
@@ -155,12 +159,12 @@ export default function LudoGameScreen({ navigation, route }) {
         >
           <Text style={styles.leaveText}>✕</Text>
         </TouchableOpacity>
-        <View style={styles.turnBanner}>
+        <View style={[styles.turnBanner, isMyTurn && styles.turnBannerActive]}>
           <View style={[styles.turnDot, { backgroundColor: currentColor?.primary || COLORS.primary }]} />
           <Text style={styles.turnText}>
             {isLocal
               ? `${currentPlayer?.name || '...'}'s Turn`
-              : (isMyTurn ? '🎯 Your Turn!' : `${currentPlayer?.name || '...'}'s Turn`)
+              : (isMyTurn ? 'Your Turn' : `${currentPlayer?.name || '...'}'s Turn`)
             }
           </Text>
         </View>
@@ -226,7 +230,7 @@ export default function LudoGameScreen({ navigation, route }) {
       {/* Move prompt */}
       {isMyTurn && gameState?.diceRolled && (
         <View style={styles.moveBanner}>
-          <Text style={styles.moveBannerText}>👆 Tap a token to move it!</Text>
+          <Text style={styles.moveBannerText}>Tap a token to move it</Text>
         </View>
       )}
     </View>
@@ -243,6 +247,11 @@ const styles = StyleSheet.create({
   leaveText: { color: COLORS.error, fontSize: SIZES.fontXl, fontFamily: FONTS.body },
   turnBanner: { flexDirection: 'row', alignItems: 'center', gap: SIZES.xs, backgroundColor: COLORS.bgCard,
     borderRadius: SIZES.radiusFull, paddingHorizontal: SIZES.md, paddingVertical: SIZES.xs },
+  turnBannerActive: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.6)',
+    ...SHADOWS.sm,
+  },
   turnDot: { width: 10, height: 10, borderRadius: 5 },
   turnText: { fontFamily: FONTS.bodySemiBold, fontSize: SIZES.fontMd, color: COLORS.textPrimary },
   gameCode: { color: COLORS.textMuted, fontFamily: FONTS.bodyRegular, fontSize: SIZES.fontSm },

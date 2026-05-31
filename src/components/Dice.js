@@ -4,6 +4,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions,
 } from 'react-native';
 import { COLORS, SIZES, SHADOWS } from '../config/theme';
+import { tapFeedback } from '../services/feedback';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ function DiceFace({ value, size }) {
 
   return (
     <View style={[styles.diceFace, { width: size, height: size, borderRadius: radius }]}>
+      <View style={styles.faceHighlight} />
       {[0, 1, 2].map((row) =>
         [0, 1, 2].map((col) => {
           const active = pips.some(([r, c]) => r === row && c === col);
@@ -77,6 +79,7 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
 
   const shake = () => {
     if (disabled || !isMyTurn) return;
+    tapFeedback();
     clearTimers();
 
     // Step delays in ms — fast start, decelerates to a stop (like a real tumbling die)
@@ -136,7 +139,7 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
         <DiceFace value={displayValue} size={DICE_SIZE} />
         {!isMyTurn && (
           <View style={[styles.lockOverlay, { borderRadius: DICE_SIZE * 0.18 }]}>
-            <Text style={styles.lockIcon}>🔒</Text>
+            <View style={styles.lockDot} />
           </View>
         )}
       </Animated.View>
@@ -150,11 +153,20 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
 
 const styles = StyleSheet.create({
   diceFace: {
-    backgroundColor: '#FFFDF0',
+    backgroundColor: '#FFF5D6',
     borderWidth: 2.5,
-    borderColor: COLORS.accent,
+    borderColor: '#F0B94D',
     position: 'relative',
     overflow: 'hidden',
+  },
+  faceHighlight: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    right: 16,
+    height: 16,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   pipCell: {
     position: 'absolute',
@@ -163,6 +175,11 @@ const styles = StyleSheet.create({
   },
   pip: {
     backgroundColor: '#1A1A2E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
   },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -170,7 +187,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  lockIcon: { fontSize: 18 },
+  lockDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   label: {
     color: COLORS.textSecondary,
     fontSize: SIZES.fontXs,

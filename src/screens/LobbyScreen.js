@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { COLORS, SIZES, FONTS, SHADOWS } from '../config/theme';
 import { createRoom, joinRoom } from '../services/rooms';
+import GameGlyph from '../components/ui/GameGlyph';
+import { tapFeedback } from '../services/feedback';
 
 export default function LobbyScreen({ navigation, route }) {
   const { game, user } = route.params;
@@ -98,7 +100,7 @@ export default function LobbyScreen({ navigation, route }) {
 
         {/* Game Banner */}
         <View style={styles.gameBanner}>
-          <Text style={styles.bannerEmoji}>{game.emoji}</Text>
+          <GameGlyph gameId={game.id} size={58} />
           <View>
             <Text style={styles.bannerTitle}>{game.title}</Text>
             <Text style={styles.bannerSub}>{game.desc}</Text>
@@ -110,12 +112,12 @@ export default function LobbyScreen({ navigation, route }) {
           <Animated.View style={[styles.tabIndicator, { left: indicatorLeft }]} />
           <TouchableOpacity style={styles.tab} onPress={() => switchTab('create')}>
             <Text style={[styles.tabText, tab === 'create' && styles.tabTextActive]}>
-              🏠 Create Room
+              Create Room
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tab} onPress={() => switchTab('join')}>
             <Text style={[styles.tabText, tab === 'join' && styles.tabTextActive]}>
-              🔗 Join Room
+              Join Room
             </Text>
           </TouchableOpacity>
         </View>
@@ -135,7 +137,7 @@ export default function LobbyScreen({ navigation, route }) {
                       onPress={() => setPlayerCount(n)}
                     >
                       <Text style={[styles.countBtnText, playerCount === n && styles.countBtnTextActive]}>
-                        {n} {'👤'.repeat(n)}
+                        {n} Players
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -144,24 +146,34 @@ export default function LobbyScreen({ navigation, route }) {
             )}
             {game.id === 'ttt' && (
               <View style={styles.infoBox}>
-                <Text style={styles.infoText}>✖️⭕ Tic Tac Toe is a 2-player game</Text>
+                <Text style={styles.infoText}>Tic Tac Toe is a 2-player game</Text>
               </View>
             )}
 
             <View style={styles.infoBox}>
-              <Text style={styles.infoText}>📋 A 6-digit room code will be generated for you to share with friends</Text>
+              <Text style={styles.infoText}>A 6-digit room code will be generated for you to share with friends</Text>
             </View>
 
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleCreate} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>🌐 Play Online (Create Room)</Text>}
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => {
+                tapFeedback();
+                handleCreate();
+              }}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Play Online (Create Room)</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.primaryBtn, { backgroundColor: COLORS.accent, marginTop: 12 }]}
-              onPress={handlePlayLocally}
+              onPress={() => {
+                tapFeedback();
+                handlePlayLocally();
+              }}
               disabled={loading}
             >
-              <Text style={[styles.primaryBtnText, { color: COLORS.bgDark }]}>👥 Play Offline (Pass & Play)</Text>
+              <Text style={[styles.primaryBtnText, { color: COLORS.bgDark }]}>Play Offline (Pass & Play)</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -182,10 +194,17 @@ export default function LobbyScreen({ navigation, route }) {
               autoFocus
             />
             <View style={styles.infoBox}>
-              <Text style={styles.infoText}>🔗 Ask your friend to share their room code with you</Text>
+              <Text style={styles.infoText}>Ask your friend to share their room code with you</Text>
             </View>
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleJoin} disabled={loading || joinCode.length < 4}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>🚀 Join Room</Text>}
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => {
+                tapFeedback();
+                handleJoin();
+              }}
+              disabled={loading || joinCode.length < 4}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Join Room</Text>}
             </TouchableOpacity>
           </View>
         )}
@@ -204,7 +223,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgCard, borderRadius: SIZES.radiusXl,
     padding: SIZES.lg, marginBottom: SIZES.xl, borderWidth: 1, borderColor: COLORS.bgCardLight,
   },
-  bannerEmoji: { fontSize: 48 },
   bannerTitle: { fontFamily: FONTS.heading, fontSize: SIZES.fontXxl, color: COLORS.textPrimary },
   bannerSub: { fontFamily: FONTS.bodyRegular, fontSize: SIZES.fontSm, color: COLORS.textSecondary },
   tabContainer: {
