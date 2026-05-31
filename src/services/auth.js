@@ -1,7 +1,5 @@
 // Auth Service — Firebase Authentication
 import {
-  GoogleAuthProvider,
-  signInWithCredential,
   signInAnonymously,
   signOut as firebaseSignOut,
   onAuthStateChanged,

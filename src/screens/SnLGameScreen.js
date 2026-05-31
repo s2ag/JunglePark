@@ -1,5 +1,5 @@
 // SnLGameScreen — Full multiplayer Snake & Ladders game
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Animated, Alert
@@ -11,14 +11,15 @@ import SnLBoard from '../components/snl/SnLBoard';
 import Dice from '../components/Dice';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
+import { diceRollFeedback, snakeFeedback, ladderFeedback, winFeedback } from '../services/feedback';
 
 export default function SnLGameScreen({ navigation, route }) {
   const { code, user, players, isLocal } = route.params;
-  const [gameState, setGameState] = useState(null);
+  const [gameState, setGameState] = useState(() => (isLocal ? createInitialSnLState(players) : null));
   const [rolling, setRolling] = useState(false);
   const [eventMsg, setEventMsg] = useState(null);
-  const eventOpacity = useRef(new Animated.Value(0)).current;
-  const eventScale = useRef(new Animated.Value(0.5)).current;
+  const eventOpacity = useMemo(() => new Animated.Value(0), []);
+  const eventScale = useMemo(() => new Animated.Value(0.5), []);
 
   // Derived turn info
   const currentPlayerUid = gameState?.playerOrder?.[gameState?.currentPlayerIndex];
@@ -29,38 +30,61 @@ export default function SnLGameScreen({ navigation, route }) {
     ? true
     : (gameState ? gameState.playerOrder[gameState.currentPlayerIndex] === user.uid : false);
 
+  // ── Show event popup ──────────────────────────────────────────────────────
+  const showEvent = useCallback((event) => {
+    let msg = '';
+    if (event.type === 'snake')   msg = `🐍 Oh no! Snake from ${event.from} → ${event.to}!`;
+    else if (event.type === 'ladder') msg = `🪜 Ladder! Up from ${event.from} → ${event.to}!`;
+    else if (event.type === 'bounce') msg = `↩ Too far! Stay at ${event.to}`;
+    else return;
+
+    setEventMsg(msg);
+    eventOpacity.setValue(0);
+    eventScale.setValue(0.5);
+
+    Animated.parallel([
+      Animated.spring(eventScale, { toValue: 1, tension: 80, friction: 5, useNativeDriver: true }),
+      Animated.timing(eventOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start(() => {
+      setTimeout(() => {
+        Animated.timing(eventOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(
+          () => setEventMsg(null)
+        );
+      }, 2000);
+    });
+  }, [eventOpacity, eventScale]);
+
   // ── Initialise game ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (isLocal) {
-      setGameState(createInitialSnLState(players));
-    } else {
-      const unsub = listenToRoom(code, (data) => {
-        if (!data) return;
-        if (data.gameState) {
-          setGameState((prev) => {
-            // Show event if it just changed
-            if (
-              data.gameState.lastEvent &&
-              (!prev || JSON.stringify(prev.lastEvent) !== JSON.stringify(data.gameState.lastEvent))
-            ) {
-              showEvent(data.gameState.lastEvent);
-            }
-            return data.gameState;
-          });
-        }
-        if (data.status === 'finished') {
-          navigation.replace('Results', {
-            winnerId: data.winnerId,
-            players,
-            game: { id: 'snl', title: 'Snake & Ladders', emoji: '🐍' },
-            code,
-            user,
-          });
-        }
-      });
-      return unsub;
-    }
-  }, [code, isLocal]);
+    if (isLocal) return undefined;
+
+    const unsub = listenToRoom(code, (data) => {
+      if (!data) return;
+      if (data.gameState) {
+        setGameState((prev) => {
+          // Show event if it just changed
+          if (
+            data.gameState.lastEvent &&
+            (!prev || JSON.stringify(prev.lastEvent) !== JSON.stringify(data.gameState.lastEvent))
+          ) {
+            showEvent(data.gameState.lastEvent);
+          }
+          return data.gameState;
+        });
+      }
+      if (data.status === 'finished') {
+        navigation.replace('Results', {
+          winnerId: data.winnerId,
+          players,
+          game: { id: 'snl', title: 'Snake & Ladders', emoji: '🐍' },
+          code,
+          user,
+        });
+      }
+    });
+
+    return unsub;
+  }, [code, isLocal, navigation, players, showEvent, user]);
 
   // ── Auto-move after dice roll (1.5 s delay so player can see value) ───────
   useEffect(() => {
@@ -72,9 +96,15 @@ export default function SnLGameScreen({ navigation, route }) {
 
       const newState = movePlayer(gameState, activeUid, gameState.diceValue);
 
-      if (isLocal && newState.lastEvent) showEvent(newState.lastEvent);
+      if (isLocal && newState.lastEvent) {
+        showEvent(newState.lastEvent);
+        // Contextual haptics for snake/ladder events
+        if (newState.lastEvent.type === 'snake') snakeFeedback();
+        else if (newState.lastEvent.type === 'ladder') ladderFeedback();
+      }
 
       if (newState.winner) {
+        winFeedback();
         if (isLocal) {
           navigation.replace('Results', {
             winnerId: newState.winner,
@@ -97,35 +127,12 @@ export default function SnLGameScreen({ navigation, route }) {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [gameState?.phase, gameState?.diceRolled, isMyTurn, currentPlayerUid]);
-
-  // ── Show event popup ──────────────────────────────────────────────────────
-  const showEvent = (event) => {
-    let msg = '';
-    if (event.type === 'snake')   msg = `🐍 Oh no! Snake from ${event.from} → ${event.to}!`;
-    else if (event.type === 'ladder') msg = `🪜 Ladder! Up from ${event.from} → ${event.to}!`;
-    else if (event.type === 'bounce') msg = `↩ Too far! Stay at ${event.to}`;
-    else return;
-
-    setEventMsg(msg);
-    eventOpacity.setValue(0);
-    eventScale.setValue(0.5);
-
-    Animated.parallel([
-      Animated.spring(eventScale, { toValue: 1, tension: 80, friction: 5, useNativeDriver: true }),
-      Animated.timing(eventOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ]).start(() => {
-      setTimeout(() => {
-        Animated.timing(eventOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(
-          () => setEventMsg(null)
-        );
-      }, 2000);
-    });
-  };
+  }, [code, currentPlayerUid, gameState, isLocal, isMyTurn, navigation, players, showEvent, user]);
 
   // ── Roll dice ─────────────────────────────────────────────────────────────
   const handleRoll = async () => {
     if (!isMyTurn || rolling || !gameState || gameState.diceRolled) return;
+    diceRollFeedback();
     setRolling(true);
 
     const value = rollDiceSnL();

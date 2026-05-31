@@ -1,12 +1,14 @@
 // HomeScreen — Game Selection Hub
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Animated, ScrollView, StatusBar, Pressable
 } from 'react-native';
-import { COLORS, SIZES, FONTS, SHADOWS } from '../config/theme';
+import { COLORS, SIZES, FONTS } from '../config/theme';
 import { signOut } from '../services/auth';
 import PlayerAvatar from '../components/PlayerAvatar';
+import GameGlyph from '../components/ui/GameGlyph';
+import { tapFeedback } from '../services/feedback';
 
 const GAMES = [
   {
@@ -14,7 +16,6 @@ const GAMES = [
     title: 'Ludo',
     emoji: '🎲',
     desc: '2–4 players • Classic strategy',
-    bgEmojis: ['🔴', '🔵', '🟢', '🟡'],
     players: '2-4',
     duration: '15-30 min',
     color: COLORS.purple,
@@ -24,7 +25,6 @@ const GAMES = [
     title: 'Snake & Ladders',
     emoji: '🐍',
     desc: '2–4 players • Fun for everyone',
-    bgEmojis: ['🐍', '🪜', '🎲', '⭐'],
     players: '2-4',
     duration: '10-20 min',
     color: COLORS.green,
@@ -34,7 +34,6 @@ const GAMES = [
     title: 'Tic Tac Toe',
     emoji: '✖️',
     desc: '2 players • Quick & tactical',
-    bgEmojis: ['✖️', '⭕', '✖️', '⭕'],
     players: '2',
     duration: '2-5 min',
     color: COLORS.info,
@@ -45,8 +44,8 @@ const GAMES = [
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const GameCard = ({ game, onPress, index }) => {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useMemo(() => new Animated.Value(0.9), []);
+  const opacity = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
     Animated.parallel([
@@ -59,7 +58,7 @@ const GameCard = ({ game, onPress, index }) => {
         delay: index * 120, useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [index, opacity, scale]);
 
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.97, tension: 80, friction: 5, useNativeDriver: true }).start();
@@ -73,21 +72,19 @@ const GameCard = ({ game, onPress, index }) => {
         { borderColor: game.color, opacity, transform: [{ scale }] },
       ]}
       onPress={() => onPress(game)}
-      onPressIn={handlePressIn}
+      onPressIn={() => {
+        tapFeedback();
+        handlePressIn();
+      }}
       onPressOut={handlePressOut}
     >
-      {/* Background floating emojis */}
-      {game.bgEmojis.map((e, i) => (
-        <Text key={i} style={[styles.bgEmoji, {
-          top: [10, 20, 50, 65][i] + '%',
-          right: [5, 60, 15, 55][i] + '%',
-          fontSize: [40, 30, 36, 28][i],
-        }]}>{e}</Text>
-      ))}
+      <View style={[styles.spark, { top: '20%', right: '12%', backgroundColor: `${game.color}40` }]} />
+      <View style={[styles.spark, { top: '62%', right: '52%', backgroundColor: `${game.color}30` }]} />
+      <View style={[styles.spark, { top: '35%', right: '70%', backgroundColor: `${game.color}25` }]} />
 
       <View style={styles.cardInner}>
         <View style={[styles.gameIconWrap, { borderColor: game.color + '44' }]}>
-          <Text style={styles.gameEmoji}>{game.emoji}</Text>
+          <GameGlyph gameId={game.id} size={56} backgroundColor="rgba(255,255,255,0.03)" />
         </View>
         <View style={styles.gameInfo}>
           <Text style={styles.gameTitle}>{game.title}</Text>
@@ -137,7 +134,11 @@ export default function HomeScreen({ navigation, route, user: propUser, setLocal
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Banner */}
         <View style={styles.banner}>
-          <Text style={styles.bannerEmoji}>🌴🎮🌴</Text>
+          <View style={styles.bannerGlyph}>
+            <GameGlyph gameId="ludo" size={48} />
+            <GameGlyph gameId="snl" size={48} />
+            <GameGlyph gameId="ttt" size={48} />
+          </View>
           <Text style={styles.bannerTitle}>Jungle Park</Text>
           <Text style={styles.bannerSub}>Challenge friends online!</Text>
         </View>
@@ -197,7 +198,11 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radiusXl, marginBottom: SIZES.xl,
     borderWidth: 1, borderColor: COLORS.bgCardLight,
   },
-  bannerEmoji: { fontSize: 48, marginBottom: SIZES.sm },
+  bannerGlyph: {
+    flexDirection: 'row',
+    gap: SIZES.sm,
+    marginBottom: SIZES.sm,
+  },
   bannerTitle: { fontFamily: FONTS.heading, fontSize: SIZES.fontXxxl, color: COLORS.textPrimary },
   bannerSub: {
     fontFamily: FONTS.bodyRegular, fontSize: SIZES.fontMd,
@@ -215,7 +220,12 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
-  bgEmoji: { position: 'absolute', opacity: 0.12 },
+  spark: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
   cardInner: {
     flexDirection: 'row', alignItems: 'center',
     padding: SIZES.lg, gap: SIZES.md,
@@ -225,7 +235,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgCardLight, alignItems: 'center',
     justifyContent: 'center', borderWidth: 1,
   },
-  gameEmoji: { fontSize: 38 },
   gameInfo: { flex: 1 },
   gameTitle: {
     fontFamily: FONTS.heading, fontSize: SIZES.fontXxl, color: COLORS.textPrimary,

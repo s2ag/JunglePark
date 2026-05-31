@@ -1,10 +1,11 @@
-// LudoBoard — SVG-based Ludo board with animated token movement
-import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Animated } from 'react-native';
+// LudoBoard — Premium SVG-based Ludo board with 60fps native-driver token animations
+import React, { useState, useMemo, useEffect, memo } from 'react';
+import { View, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
 import Svg, {
-  Rect, Circle, Text as SvgText, G, Polygon, Defs, LinearGradient, Stop
+  Rect, Circle, Text as SvgText, G, Polygon, Defs,
+  LinearGradient, Stop, RadialGradient
 } from 'react-native-svg';
-import { PLAYER_COLORS, COLORS } from '../../config/theme';
+import { PLAYER_COLORS } from '../../config/theme';
 import { getBoardSquare } from '../../game/ludo/LudoEngine';
 
 const { width } = Dimensions.get('window');
@@ -127,96 +128,146 @@ const getTokenCoords = (playerIndex, tokenId, position) => {
   return { x: cell.col * S + S / 2, y: cell.row * S + S / 2 };
 };
 
-// Animated token that smoothly slides to new positions
-function AnimatedToken({ item, onPress }) {
-  const animX = useRef(new Animated.Value(item.x)).current;
-  const animY = useRef(new Animated.Value(item.y)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+// Animated token — uses native driver (translateX/Y + scale) for 60fps on Android
+const AnimatedToken = memo(function AnimatedToken({ item, onPress }) {
+  // Use translateX/Y so we can enable useNativeDriver: true
+  const [translateX] = useState(() => new Animated.Value(item.x));
+  const [translateY] = useState(() => new Animated.Value(item.y));
+  const scaleAnim = useMemo(() => new Animated.Value(1), []);
+  const glowOpacity = useMemo(() => new Animated.Value(0), []);
 
-  // Animate to new position whenever x/y changes
+  // Animate to new position (spring with native driver)
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(animX, {
+      Animated.spring(translateX, {
         toValue: item.x,
-        useNativeDriver: false,
-        tension: 120,
-        friction: 10,
+        useNativeDriver: true,
+        tension: 140,
+        friction: 12,
       }),
-      Animated.spring(animY, {
+      Animated.spring(translateY, {
         toValue: item.y,
-        useNativeDriver: false,
-        tension: 120,
-        friction: 10,
+        useNativeDriver: true,
+        tension: 140,
+        friction: 12,
       }),
     ]).start();
-  }, [item.x, item.y]);
+  }, [item.x, item.y, translateX, translateY]);
 
-  // Pulse loop for movable tokens
+  // Pulse loop for movable tokens (scale + glow, native driver)
   useEffect(() => {
-    let pulseLoop;
+    let loop;
     if (item.isMovable) {
-      pulseLoop = Animated.loop(
+      loop = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.35, duration: 450, useNativeDriver: false }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 450, useNativeDriver: false }),
+          Animated.parallel([
+            Animated.timing(scaleAnim, {
+              toValue: 1.3,
+              duration: 500,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowOpacity, {
+              toValue: 0.7,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.timing(scaleAnim, {
+              toValue: 1,
+              duration: 500,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowOpacity, {
+              toValue: 0,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]),
         ])
       );
-      pulseLoop.start();
+      loop.start();
     } else {
-      pulseAnim.setValue(1);
+      scaleAnim.setValue(1);
+      glowOpacity.setValue(0);
     }
-    return () => pulseLoop && pulseLoop.stop();
-  }, [item.isMovable]);
+    return () => loop && loop.stop();
+  }, [glowOpacity, item.isMovable, scaleAnim]);
 
-  const tokenR = S * 0.35;
-  const pulseR = animX.constructor === Animated.Value
-    ? pulseAnim.interpolate({ inputRange: [1, 1.35], outputRange: [S * 0.44, S * 0.59] })
-    : S * 0.44;
-
+  const tokenR = S * 0.38;
   const color = PLAYER_COLORS[item.playerIndex].primary;
+  const lightColor = PLAYER_COLORS[item.playerIndex].light;
 
-  // We render using plain SVG elements driven by JS-animated values via a wrapper
-  // Since react-native-svg doesn't support Animated.Value directly on cx/cy,
-  // we use an Animated.View absolutely positioned over the SVG layer.
   return (
     <Animated.View
       style={{
         position: 'absolute',
-        // Centre the token circle on the animated coords
-        left: Animated.subtract(animX, tokenR),
-        top: Animated.subtract(animY, tokenR),
+        left: 0,
+        top: 0,
         width: tokenR * 2,
         height: tokenR * 2,
+        transform: [
+          { translateX: Animated.subtract(translateX, tokenR) },
+          { translateY: Animated.subtract(translateY, tokenR) },
+        ],
       }}
     >
-      <Svg width={tokenR * 2} height={tokenR * 2} onPress={onPress}>
-        {/* Pulse ring */}
-        {item.isMovable && (
+      {/* Glow ring behind token (native driver opacity) */}
+      <Animated.View
+        style={[
+          styles.tokenGlow,
+          {
+            width: tokenR * 2.6,
+            height: tokenR * 2.6,
+            borderRadius: tokenR * 1.3,
+            backgroundColor: color,
+            left: -(tokenR * 0.3),
+            top: -(tokenR * 0.3),
+            opacity: glowOpacity,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      />
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Svg width={tokenR * 2} height={tokenR * 2} onPress={onPress}>
+          <Defs>
+            <RadialGradient id={`tg-${item.playerIndex}-${item.tokenId}`} cx="40%" cy="35%" r="60%">
+              <Stop offset="0" stopColor={lightColor} />
+              <Stop offset="1" stopColor={color} />
+            </RadialGradient>
+          </Defs>
+          {/* Token shadow */}
+          <Circle cx={tokenR + 1} cy={tokenR + 2} r={tokenR * 0.9} fill="rgba(0,0,0,0.3)" />
+          {/* Main token with gradient */}
           <Circle
             cx={tokenR}
             cy={tokenR}
-            r={tokenR * 1.25}
-            fill={color}
-            opacity={0.35}
+            r={tokenR * 0.9}
+            fill={`url(#tg-${item.playerIndex}-${item.tokenId})`}
+            stroke="#fff"
+            strokeWidth={2.5}
           />
-        )}
-        {/* Main token */}
-        <Circle cx={tokenR} cy={tokenR} r={tokenR} fill={color} stroke="#fff" strokeWidth={2} />
-        {/* Token number */}
-        <SvgText
-          x={tokenR}
-          y={tokenR + 3.5}
-          fontSize={10}
-          fontWeight="bold"
-          textAnchor="middle"
-          fill="#fff"
-        >
-          {item.tokenId + 1}
-        </SvgText>
-      </Svg>
+          {/* Highlight shine */}
+          <Circle cx={tokenR - tokenR * 0.2} cy={tokenR - tokenR * 0.25} r={tokenR * 0.25}
+            fill="rgba(255,255,255,0.4)" />
+          {/* Token number */}
+          <SvgText
+            x={tokenR}
+            y={tokenR + 4}
+            fontSize={11}
+            fontWeight="bold"
+            textAnchor="middle"
+            fill="#fff"
+          >
+            {item.tokenId + 1}
+          </SvgText>
+        </Svg>
+      </Animated.View>
     </Animated.View>
   );
-}
+});
 
 export default function LudoBoard({ gameState, players, myUid, onTokenPress, movableTokenIds = [] }) {
   if (!gameState) return null;
@@ -275,74 +326,103 @@ export default function LudoBoard({ gameState, players, myUid, onTokenPress, mov
 
   return (
     <View style={styles.container}>
-      {/* Static SVG board */}
+      {/* Static SVG board — premium art */}
       <Svg width={BOARD_SIZE} height={BOARD_SIZE}>
         <Defs>
           <LinearGradient id="boardGrad" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor="#1a1a2e" />
-            <Stop offset="1" stopColor="#16213e" />
+            <Stop offset="0.5" stopColor="#16213e" />
+            <Stop offset="1" stopColor="#0f0e17" />
           </LinearGradient>
+          <LinearGradient id="boardEdge" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#FFD700" stopOpacity="0.6" />
+            <Stop offset="0.5" stopColor="#FF6B35" stopOpacity="0.4" />
+            <Stop offset="1" stopColor="#FFD700" stopOpacity="0.6" />
+          </LinearGradient>
+          <RadialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor="#FFD700" stopOpacity="0.15" />
+            <Stop offset="1" stopColor="#FFD700" stopOpacity="0" />
+          </RadialGradient>
+          {/* Zone gradients for premium look */}
+          {Object.entries(PLAYER_ZONES).map(([pid, zone]) => (
+            <LinearGradient key={`zg-${pid}`} id={`zoneGrad${pid}`} x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={zone.color} stopOpacity="0.95" />
+              <Stop offset="1" stopColor={zone.color} stopOpacity="0.7" />
+            </LinearGradient>
+          ))}
         </Defs>
 
-        {/* Board background */}
-        <Rect x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} fill="url(#boardGrad)" rx={12} />
+        {/* Board background with depth */}
+        <Rect x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} fill="url(#boardGrad)" rx={14} />
+        {/* Center ambient glow */}
+        <Circle cx={BOARD_SIZE / 2} cy={BOARD_SIZE / 2} r={BOARD_SIZE * 0.3} fill="url(#centerGlow)" />
+        {/* Decorative border — double-line gold */}
         <Rect x={boardPad} y={boardPad} width={BOARD_SIZE - boardPad * 2} height={BOARD_SIZE - boardPad * 2}
-          fill="none" stroke={COLORS.accent} strokeWidth={1.5} rx={10} />
+          fill="none" stroke="url(#boardEdge)" strokeWidth={2} rx={12} />
+        <Rect x={boardPad + 4} y={boardPad + 4} width={BOARD_SIZE - boardPad * 2 - 8} height={BOARD_SIZE - boardPad * 2 - 8}
+          fill="none" stroke="rgba(255,215,0,0.12)" strokeWidth={1} rx={10} />
 
-        {/* Home zones */}
+        {/* Home zones — premium gradient fill */}
         {Object.entries(PLAYER_ZONES).map(([pid, zone]) => (
           <G key={pid}>
             <Rect
               x={zone.col * S + boardPad} y={zone.row * S + boardPad}
               width={S * 6 - boardPad} height={S * 6 - boardPad}
-              fill={zone.color} opacity={0.85} rx={8}
+              fill={`url(#zoneGrad${pid})`} rx={10}
             />
+            {/* Inner yard — frosted glass effect */}
             <Rect
               x={zone.col * S + S + boardPad} y={zone.row * S + S + boardPad}
               width={S * 4 - boardPad} height={S * 4 - boardPad}
-              fill="rgba(255,255,255,0.92)" rx={6}
+              fill="rgba(255,255,255,0.88)" rx={8}
+              stroke="rgba(255,255,255,0.4)" strokeWidth={1}
             />
+            {/* Token home circles with soft shadow */}
             {[
               [zone.col + 1.75, zone.row + 1.75],
               [zone.col + 3.75, zone.row + 1.75],
               [zone.col + 1.75, zone.row + 3.75],
               [zone.col + 3.75, zone.row + 3.75],
             ].map(([cx, cy], i) => (
-              <Circle key={i} cx={cx * S} cy={cy * S} r={S * 0.65}
-                fill={zone.color} opacity={0.4} stroke={zone.color} strokeWidth={2} />
+              <G key={i}>
+                <Circle cx={cx * S + 1} cy={cy * S + 2} r={S * 0.6}
+                  fill="rgba(0,0,0,0.15)" />
+                <Circle cx={cx * S} cy={cy * S} r={S * 0.65}
+                  fill={zone.color} opacity={0.35} stroke={zone.color} strokeWidth={2.5} />
+              </G>
             ))}
           </G>
         ))}
 
-        {/* Center winning triangles */}
+        {/* Center winning triangles with enhanced colors */}
         <G>
           <Polygon points={`${6.5 * S},${6.5 * S} ${8.5 * S},${6.5 * S} ${7.5 * S},${7.5 * S}`}
-            fill={PLAYER_COLORS[1].primary} opacity={0.9} />
+            fill={PLAYER_COLORS[1].primary} opacity={0.92} />
           <Polygon points={`${8.5 * S},${6.5 * S} ${8.5 * S},${8.5 * S} ${7.5 * S},${7.5 * S}`}
-            fill={PLAYER_COLORS[2].primary} opacity={0.9} />
+            fill={PLAYER_COLORS[2].primary} opacity={0.92} />
           <Polygon points={`${6.5 * S},${8.5 * S} ${8.5 * S},${8.5 * S} ${7.5 * S},${7.5 * S}`}
-            fill={PLAYER_COLORS[3].primary} opacity={0.9} />
+            fill={PLAYER_COLORS[3].primary} opacity={0.92} />
           <Polygon points={`${6.5 * S},${6.5 * S} ${6.5 * S},${8.5 * S} ${7.5 * S},${7.5 * S}`}
-            fill={PLAYER_COLORS[4].primary} opacity={0.9} />
-          {/* Center SVG star */}
+            fill={PLAYER_COLORS[4].primary} opacity={0.92} />
+          {/* Center star — larger, brighter */}
           <Polygon
-            points={starPoints(7.5 * S, 7.5 * S, S * 0.42, S * 0.17)}
+            points={starPoints(7.5 * S, 7.5 * S, S * 0.5, S * 0.2)}
             fill="#FFD700"
-            opacity={0.95}
+            opacity={1}
           />
+          <Circle cx={7.5 * S} cy={7.5 * S} r={S * 0.18} fill="#FFF5D6" opacity={0.8} />
         </G>
 
-        {/* Path grid cells */}
+        {/* Path grid cells — subtle with rounded edges */}
         {GRID_PATH.map((cell, idx) => {
           const cellNum = idx === 0 ? 52 : idx;
-          // Only start squares get player color; all other path cells are plain
           const isRedStart = cellNum === 1;
           const isBlueStart = cellNum === 14;
           const isGreenStart = cellNum === 27;
           const isYellowStart = cellNum === 40;
           const isStart = isRedStart || isBlueStart || isGreenStart || isYellowStart;
 
-          let fill = 'rgba(255,255,255,0.03)';
+          let fill = 'rgba(255,255,255,0.04)';
           if (isRedStart) fill = PLAYER_COLORS[1].primary;
           else if (isBlueStart) fill = PLAYER_COLORS[2].primary;
           else if (isGreenStart) fill = PLAYER_COLORS[3].primary;
@@ -350,49 +430,63 @@ export default function LudoBoard({ gameState, players, myUid, onTokenPress, mov
 
           return (
             <Rect key={`path-${idx}`}
-              x={cell.col * S} y={cell.row * S} width={S} height={S}
+              x={cell.col * S + 0.5} y={cell.row * S + 0.5} width={S - 1} height={S - 1}
               fill={fill}
-              opacity={isStart ? 0.88 : 1}
-              stroke={isStart ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.08)'}
-              strokeWidth={isStart ? 1.2 : 0.5}
+              opacity={isStart ? 0.9 : 1}
+              stroke={isStart ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.08)'}
+              strokeWidth={isStart ? 1.5 : 0.5}
+              rx={2}
             />
           );
         })}
 
-        {/* Home stretches */}
-        {Array.from({ length: 5 }).map((_, step) => (
-          <G key={`homestretch-${step}`}>
-            <Rect x={(step + 1) * S} y={7 * S} width={S} height={S} fill={PLAYER_COLORS[1].primary} opacity={0.8} stroke="rgba(255,255,255,0.15)" />
-            <Rect x={7 * S} y={(step + 1) * S} width={S} height={S} fill={PLAYER_COLORS[2].primary} opacity={0.8} stroke="rgba(255,255,255,0.15)" />
-            <Rect x={(13 - step) * S} y={7 * S} width={S} height={S} fill={PLAYER_COLORS[3].primary} opacity={0.8} stroke="rgba(255,255,255,0.15)" />
-            <Rect x={7 * S} y={(13 - step) * S} width={S} height={S} fill={PLAYER_COLORS[4].primary} opacity={0.8} stroke="rgba(255,255,255,0.15)" />
-          </G>
-        ))}
+        {/* Home stretches — gradient opacity toward center */}
+        {Array.from({ length: 5 }).map((_, step) => {
+          const opacity = 0.6 + (step * 0.06);
+          return (
+            <G key={`homestretch-${step}`}>
+              <Rect x={(step + 1) * S + 0.5} y={7 * S + 0.5} width={S - 1} height={S - 1}
+                fill={PLAYER_COLORS[1].primary} opacity={opacity} rx={2}
+                stroke="rgba(255,255,255,0.18)" strokeWidth={0.5} />
+              <Rect x={7 * S + 0.5} y={(step + 1) * S + 0.5} width={S - 1} height={S - 1}
+                fill={PLAYER_COLORS[2].primary} opacity={opacity} rx={2}
+                stroke="rgba(255,255,255,0.18)" strokeWidth={0.5} />
+              <Rect x={(13 - step) * S + 0.5} y={7 * S + 0.5} width={S - 1} height={S - 1}
+                fill={PLAYER_COLORS[3].primary} opacity={opacity} rx={2}
+                stroke="rgba(255,255,255,0.18)" strokeWidth={0.5} />
+              <Rect x={7 * S + 0.5} y={(13 - step) * S + 0.5} width={S - 1} height={S - 1}
+                fill={PLAYER_COLORS[4].primary} opacity={opacity} rx={2}
+                stroke="rgba(255,255,255,0.18)" strokeWidth={0.5} />
+            </G>
+          );
+        })}
 
-        {/* Safe square star markers — matches LUDO_SAFE_SQUARES [1,9,14,22,27,35,40,48] */}
+        {/* Safe square star markers — premium gold with glow */}
         {[
-          { row: 6, col: 1 },  // idx=1  Red start
-          { row: 2, col: 6 },  // idx=9  safe
-          { row: 1, col: 8 },  // idx=14 Blue start
-          { row: 6, col: 12 },  // idx=22 safe
-          { row: 8, col: 13 },  // idx=27 Green start
-          { row: 12, col: 8 },  // idx=35 safe
-          { row: 13, col: 6 },  // idx=40 Yellow start
-          { row: 8, col: 2 },  // idx=48 safe
+          { row: 6, col: 1 },
+          { row: 2, col: 6 },
+          { row: 1, col: 8 },
+          { row: 6, col: 12 },
+          { row: 8, col: 13 },
+          { row: 12, col: 8 },
+          { row: 13, col: 6 },
+          { row: 8, col: 2 },
         ].map((pos, idx) => {
           const cx = pos.col * S + S / 2;
           const cy = pos.row * S + S / 2;
           return (
-            <Polygon
-              key={`safe-star-${idx}`}
-              points={starPoints(cx, cy, S * 0.28, S * 0.11)}
-              fill="rgba(255,215,0,0.55)"
-            />
+            <G key={`safe-star-${idx}`}>
+              <Circle cx={cx} cy={cy} r={S * 0.32} fill="rgba(255,215,0,0.12)" />
+              <Polygon
+                points={starPoints(cx, cy, S * 0.3, S * 0.12)}
+                fill="rgba(255,215,0,0.7)"
+              />
+            </G>
           );
         })}
       </Svg>
 
-      {/* Animated tokens rendered as Animated.View layer on top of SVG */}
+      {/* Animated tokens — native driver layer */}
       <View style={[StyleSheet.absoluteFillObject, { width: BOARD_SIZE, height: BOARD_SIZE }]}
         pointerEvents="box-none">
         {renderedTokens.map((item) => (
@@ -409,4 +503,7 @@ export default function LudoBoard({ gameState, players, myUid, onTokenPress, mov
 
 const styles = StyleSheet.create({
   container: { alignItems: 'center', justifyContent: 'center' },
+  tokenGlow: {
+    position: 'absolute',
+  },
 });

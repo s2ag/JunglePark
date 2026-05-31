@@ -1,9 +1,10 @@
 // Animated 2D Dice Component — step-by-step tumbling roll
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions,
 } from 'react-native';
 import { COLORS, SIZES, SHADOWS } from '../config/theme';
+import { diceRollFeedback } from '../services/feedback';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ function DiceFace({ value, size }) {
 
   return (
     <View style={[styles.diceFace, { width: size, height: size, borderRadius: radius }]}>
+      <View style={styles.faceHighlight} />
       {[0, 1, 2].map((row) =>
         [0, 1, 2].map((col) => {
           const active = pips.some(([r, c]) => r === row && c === col);
@@ -52,31 +54,46 @@ function DiceFace({ value, size }) {
 
 export default function Dice({ value, onRoll, disabled, isMyTurn }) {
   // Persist the last real value so dice never goes blank
-  const lastValueRef = useRef(null);
-  if (value) lastValueRef.current = value;
+  const [lastValue, setLastValue] = useState(null);
 
   // cycleValue: the face shown during the step animation
   const [cycleValue, setCycleValue] = useState(null);
   const timersRef = useRef([]);
 
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const shakeAnim = useMemo(() => new Animated.Value(0), []);
+  const scaleAnim = useMemo(() => new Animated.Value(1), []);
+
+  // Update lastValue when value changes
+  useEffect(() => {
+    if (!value) return undefined;
+
+    const timeoutId = setTimeout(() => {
+      setLastValue(value);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [value]);
+
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current = [];
+  }, []);
 
   // When the real value arrives from parent after onRoll, stop cycling
   useEffect(() => {
-    if (value) {
-      clearTimers();
-      setCycleValue(null);
-    }
-  }, [value]);
+    if (!value) return undefined;
 
-  const clearTimers = () => {
-    timersRef.current.forEach((t) => clearTimeout(t));
-    timersRef.current = [];
-  };
+    clearTimers();
+    const timeoutId = setTimeout(() => {
+      setCycleValue(null);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [value, clearTimers]);
 
   const shake = () => {
     if (disabled || !isMyTurn) return;
+    diceRollFeedback();
     clearTimers();
 
     // Step delays in ms — fast start, decelerates to a stop (like a real tumbling die)
@@ -121,7 +138,7 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
   };
 
   // Show cycling face during animation, fall back to last real value
-  const displayValue = cycleValue ?? lastValueRef.current;
+  const displayValue = cycleValue ?? lastValue;
 
   return (
     <TouchableOpacity onPress={shake} disabled={disabled || !isMyTurn} activeOpacity={0.85}>
@@ -136,7 +153,7 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
         <DiceFace value={displayValue} size={DICE_SIZE} />
         {!isMyTurn && (
           <View style={[styles.lockOverlay, { borderRadius: DICE_SIZE * 0.18 }]}>
-            <Text style={styles.lockIcon}>🔒</Text>
+            <View style={styles.lockDot} />
           </View>
         )}
       </Animated.View>
@@ -150,11 +167,20 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
 
 const styles = StyleSheet.create({
   diceFace: {
-    backgroundColor: '#FFFDF0',
+    backgroundColor: '#FFF5D6',
     borderWidth: 2.5,
-    borderColor: COLORS.accent,
+    borderColor: '#F0B94D',
     position: 'relative',
     overflow: 'hidden',
+  },
+  faceHighlight: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    right: 16,
+    height: 16,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   pipCell: {
     position: 'absolute',
@@ -163,6 +189,11 @@ const styles = StyleSheet.create({
   },
   pip: {
     backgroundColor: '#1A1A2E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
   },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -170,7 +201,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  lockIcon: { fontSize: 18 },
+  lockDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   label: {
     color: COLORS.textSecondary,
     fontSize: SIZES.fontXs,

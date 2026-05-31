@@ -1,8 +1,8 @@
 // LudoGameScreen — Full multiplayer Ludo game
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Animated, Alert, Dimensions
+  ScrollView, Animated, Alert
 } from 'react-native';
 import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS } from '../config/theme';
 import { listenToRoom, updateGameState, finishGame } from '../services/rooms';
@@ -13,52 +13,20 @@ import LudoBoard from '../components/ludo/LudoBoard';
 import Dice from '../components/Dice';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
-
-const { width } = Dimensions.get('window');
+import { successFeedback, diceRollFeedback, moveFeedback } from '../services/feedback';
 
 export default function LudoGameScreen({ navigation, route }) {
   const { code, user, players, isLocal } = route.params;
-  const [room, setRoom] = useState(null);
-  const [gameState, setGameState] = useState(null);
+  const [gameState, setGameState] = useState(() => (isLocal ? createInitialLudoState(players) : null));
   const [rolling, setRolling] = useState(false);
   const [reaction, setReaction] = useState(null);
-  const reactionOpacity = useRef(new Animated.Value(0)).current;
+  const reactionOpacity = useMemo(() => new Animated.Value(0), []);
 
-  const myPlayerIndex = players.findIndex((p) => p.uid === user.uid);
   const isMyTurn = isLocal
     ? true
     : (gameState ? gameState.playerOrder[gameState.currentPlayerIndex] === user.uid : false);
 
-  useEffect(() => {
-    if (isLocal) {
-      const initialState = createInitialLudoState(players);
-      setGameState(initialState);
-    } else {
-      const unsub = listenToRoom(code, (data) => {
-        if (!data) return;
-        setRoom(data);
-        if (data.gameState) setGameState(data.gameState);
-        if (data.status === 'finished') {
-          navigation.replace('Results', {
-            winnerId: data.winnerId,
-            players,
-            game: { id: 'ludo', title: 'Ludo', emoji: '🎲' },
-            code,
-            user,
-          });
-        }
-        // Show incoming reactions
-        if (data.reactions) {
-          const all = Object.values(data.reactions);
-          const latest = all[all.length - 1];
-          if (latest && latest.uid !== user.uid) showReaction(latest.emoji);
-        }
-      });
-      return unsub;
-    }
-  }, [code, isLocal]);
-
-  const showReaction = (emoji) => {
+  const showReaction = useCallback((emoji) => {
     setReaction(emoji);
     reactionOpacity.setValue(0);
     Animated.sequence([
@@ -66,7 +34,33 @@ export default function LudoGameScreen({ navigation, route }) {
       Animated.delay(1500),
       Animated.timing(reactionOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start(() => setReaction(null));
-  };
+  }, [reactionOpacity]);
+
+  useEffect(() => {
+    if (isLocal) return undefined;
+
+    const unsub = listenToRoom(code, (data) => {
+      if (!data) return;
+      if (data.gameState) setGameState(data.gameState);
+      if (data.status === 'finished') {
+        navigation.replace('Results', {
+          winnerId: data.winnerId,
+          players,
+          game: { id: 'ludo', title: 'Ludo', emoji: '🎲' },
+          code,
+          user,
+        });
+      }
+      // Show incoming reactions
+      if (data.reactions) {
+        const all = Object.values(data.reactions);
+        const latest = all[all.length - 1];
+        if (latest && latest.uid !== user.uid) showReaction(latest.emoji);
+      }
+    });
+
+    return unsub;
+  }, [code, isLocal, navigation, players, showReaction, user]);
 
   const currentPlayerUid = gameState?.playerOrder?.[gameState?.currentPlayerIndex];
   const currentPlayer = players.find((p) => p.uid === currentPlayerUid);
@@ -77,6 +71,7 @@ export default function LudoGameScreen({ navigation, route }) {
 
   const handleRoll = async () => {
     if (!isMyTurn || rolling || !gameState || gameState.diceRolled) return;
+    diceRollFeedback();
     setRolling(true);
     const value = rollDice();
     const activeUid = isLocal ? currentPlayerUid : user.uid;
@@ -108,12 +103,14 @@ export default function LudoGameScreen({ navigation, route }) {
 
   const handleTokenPress = async (tokenId) => {
     if (!isMyTurn || !gameState || !gameState.diceRolled) return;
+    moveFeedback();
     const activeUid = isLocal ? currentPlayerUid : user.uid;
     const movable = getMovableTokens(gameState, activeUid, gameState.diceValue);
     if (!movable.find((t) => t.id === tokenId)) return;
 
     const newState = moveToken(gameState, activeUid, tokenId, gameState.diceValue);
     if (newState.winner) {
+      successFeedback();
       if (isLocal) {
         navigation.replace('Results', {
           winnerId: newState.winner,
@@ -155,12 +152,12 @@ export default function LudoGameScreen({ navigation, route }) {
         >
           <Text style={styles.leaveText}>✕</Text>
         </TouchableOpacity>
-        <View style={styles.turnBanner}>
+        <View style={[styles.turnBanner, isMyTurn && styles.turnBannerActive]}>
           <View style={[styles.turnDot, { backgroundColor: currentColor?.primary || COLORS.primary }]} />
           <Text style={styles.turnText}>
             {isLocal
               ? `${currentPlayer?.name || '...'}'s Turn`
-              : (isMyTurn ? '🎯 Your Turn!' : `${currentPlayer?.name || '...'}'s Turn`)
+              : (isMyTurn ? 'Your Turn' : `${currentPlayer?.name || '...'}'s Turn`)
             }
           </Text>
         </View>
@@ -226,7 +223,7 @@ export default function LudoGameScreen({ navigation, route }) {
       {/* Move prompt */}
       {isMyTurn && gameState?.diceRolled && (
         <View style={styles.moveBanner}>
-          <Text style={styles.moveBannerText}>👆 Tap a token to move it!</Text>
+          <Text style={styles.moveBannerText}>Tap a token to move it</Text>
         </View>
       )}
     </View>
@@ -243,6 +240,11 @@ const styles = StyleSheet.create({
   leaveText: { color: COLORS.error, fontSize: SIZES.fontXl, fontFamily: FONTS.body },
   turnBanner: { flexDirection: 'row', alignItems: 'center', gap: SIZES.xs, backgroundColor: COLORS.bgCard,
     borderRadius: SIZES.radiusFull, paddingHorizontal: SIZES.md, paddingVertical: SIZES.xs },
+  turnBannerActive: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.6)',
+    ...SHADOWS.sm,
+  },
   turnDot: { width: 10, height: 10, borderRadius: 5 },
   turnText: { fontFamily: FONTS.bodySemiBold, fontSize: SIZES.fontMd, color: COLORS.textPrimary },
   gameCode: { color: COLORS.textMuted, fontFamily: FONTS.bodyRegular, fontSize: SIZES.fontSm },

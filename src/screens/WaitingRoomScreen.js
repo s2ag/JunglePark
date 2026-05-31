@@ -1,18 +1,20 @@
 // WaitingRoomScreen — Real-time player lobby before game starts
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Animated, Share, Alert, ActivityIndicator
 } from 'react-native';
-import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS, AVATARS } from '../config/theme';
+import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS } from '../config/theme';
 import { listenToRoom, startGame, leaveRoom } from '../services/rooms';
 import { createInitialLudoState } from '../game/ludo/LudoEngine';
 import { createInitialSnLState } from '../game/snl/SnLEngine';
 import { createInitialTTTState } from '../game/ttt/TicTacToeEngine';
 import PlayerAvatar from '../components/PlayerAvatar';
+import GameGlyph from '../components/ui/GameGlyph';
+import { tapFeedback } from '../services/feedback';
 
 const PulseDot = () => {
-  const pulse = useRef(new Animated.Value(1)).current;
+  const pulse = useMemo(() => new Animated.Value(1), []);
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -20,7 +22,7 @@ const PulseDot = () => {
         Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [pulse]);
   return <Animated.View style={[styles.dot, { transform: [{ scale: pulse }] }]} />;
 };
 
@@ -47,7 +49,7 @@ export default function WaitingRoomScreen({ navigation, route }) {
       }
     });
     return unsub;
-  }, [code]);
+  }, [code, game.id, navigation, user]);
 
   const handleShare = async () => {
     await Share.share({
@@ -89,7 +91,10 @@ export default function WaitingRoomScreen({ navigation, route }) {
         <TouchableOpacity onPress={handleLeave}>
           <Text style={styles.leaveText}>✕ Leave</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{game.emoji} {game.title}</Text>
+        <View style={styles.titleWrap}>
+          <GameGlyph gameId={game.id} size={32} />
+          <Text style={styles.headerTitle}>{game.title}</Text>
+        </View>
         <View style={{ width: 60 }} />
       </View>
 
@@ -97,8 +102,11 @@ export default function WaitingRoomScreen({ navigation, route }) {
       <View style={styles.codeCard}>
         <Text style={styles.codeLabel}>Room Code</Text>
         <Text style={styles.codeText}>{code}</Text>
-        <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
-          <Text style={styles.shareBtnText}>📤 Share with Friends</Text>
+        <TouchableOpacity style={styles.shareBtn} onPress={() => {
+          tapFeedback();
+          handleShare();
+        }}>
+          <Text style={styles.shareBtnText}>Share with Friends</Text>
         </TouchableOpacity>
       </View>
 
@@ -141,14 +149,17 @@ export default function WaitingRoomScreen({ navigation, route }) {
       {isHost ? (
         <TouchableOpacity
           style={[styles.startBtn, !canStart && styles.startBtnDisabled]}
-          onPress={handleStart}
+          onPress={() => {
+            tapFeedback();
+            handleStart();
+          }}
           disabled={!canStart || starting}
         >
           {starting
             ? <ActivityIndicator color="#fff" />
             : <>
                 <Text style={styles.startBtnText}>
-                  {canStart ? '🚀 Start Game!' : `Need ${2 - players.length} more player(s)`}
+                  {canStart ? 'Start Game' : `Need ${2 - players.length} more player(s)`}
                 </Text>
               </>
           }
@@ -166,6 +177,7 @@ export default function WaitingRoomScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgDark, paddingHorizontal: SIZES.lg, paddingTop: SIZES.xl },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SIZES.xl },
+  titleWrap: { flexDirection: 'row', alignItems: 'center', gap: SIZES.xs },
   leaveText: { color: COLORS.error, fontFamily: FONTS.bodySemiBold, fontSize: SIZES.fontMd },
   headerTitle: { fontFamily: FONTS.heading, fontSize: SIZES.fontXl, color: COLORS.textPrimary },
   codeCard: {

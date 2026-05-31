@@ -1,17 +1,17 @@
 // AuthScreen — Guest login (instant) + silent Firebase background auth
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Animated, Dimensions, ActivityIndicator, TextInput, ScrollView
+  Animated, Dimensions, TextInput, ScrollView
 } from 'react-native';
-import { COLORS, SIZES, FONTS, SHADOWS, AVATARS } from '../config/theme';
+import { COLORS, SIZES, FONTS, AVATARS } from '../config/theme';
 import { signInAsGuest } from '../services/auth';
 
 const { width, height } = Dimensions.get('window');
 
 const FloatingEmoji = ({ emoji, delay, startX }) => {
-  const y = useRef(new Animated.Value(height)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const y = useMemo(() => new Animated.Value(height), []);
+  const opacity = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
     const animate = () => {
@@ -30,7 +30,7 @@ const FloatingEmoji = ({ emoji, delay, startX }) => {
       ]).start(() => animate());
     };
     animate();
-  }, []);
+  }, [delay, opacity, y]);
 
   return (
     <Animated.Text style={[styles.floatingEmoji, { left: startX, transform: [{ translateY: y }], opacity }]}>
@@ -50,7 +50,6 @@ export default function AuthScreen({ navigation, setLocalUser }) {
   const [step, setStep] = useState('name'); // 'name' | 'avatar'
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(1);
-  const [loading, setLoading] = useState(false);
 
   const handleStart = () => {
     if (!name.trim()) return;
@@ -94,7 +93,7 @@ export default function AuthScreen({ navigation, setLocalUser }) {
       <View style={styles.card}>
         {step === 'name' && (
           <>
-            <Text style={styles.cardTitle}>What's your name? 🦁</Text>
+            <Text style={styles.cardTitle}>What{"'"}s your name? 🦁</Text>
             <Text style={styles.cardSub}>This will show to other players</Text>
             <TextInput
               style={styles.input}
@@ -134,7 +133,7 @@ export default function AuthScreen({ navigation, setLocalUser }) {
         <TouchableOpacity
           style={[styles.primaryBtn, (!name.trim()) && { opacity: 0.5 }]}
           onPress={handleStart}
-          disabled={!name.trim() || loading}
+          disabled={!name.trim()}
           activeOpacity={0.85}
         >
           <Text style={styles.primaryBtnText}>

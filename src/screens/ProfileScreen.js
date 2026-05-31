@@ -16,7 +16,7 @@ export default function ProfileScreen({ navigation, route }) {
       setProfile(p);
       setLoading(false);
     })();
-  }, []);
+  }, [user.uid]);
 
   if (loading) {
     return (

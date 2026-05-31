@@ -1,19 +1,28 @@
 // ResultsScreen — Winner announcement with confetti
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions
 } from 'react-native';
-import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS, AVATARS } from '../config/theme';
+import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS } from '../config/theme';
 import PlayerAvatar from '../components/PlayerAvatar';
+import GameGlyph from '../components/ui/GameGlyph';
+import { tapFeedback } from '../services/feedback';
 
 const { width, height } = Dimensions.get('window');
 
 // Simple confetti particle
 const Particle = ({ color, delay }) => {
-  const y = useRef(new Animated.Value(-20)).current;
-  const x = useRef(new Animated.Value(Math.random() * width)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  const y = useMemo(() => new Animated.Value(-20), []);
+  const rotate = useMemo(() => new Animated.Value(0), []);
+  const opacity = useMemo(() => new Animated.Value(1), []);
+  const [{ left, size, borderRadius }] = useState(() => {
+    const particleSize = 8 + Math.random() * 10;
+    return {
+      left: Math.random() * width,
+      size: particleSize,
+      borderRadius: Math.random() > 0.5 ? particleSize / 2 : 2,
+    };
+  });
 
   useEffect(() => {
     Animated.sequence([
@@ -27,17 +36,16 @@ const Particle = ({ color, delay }) => {
         ]),
       ]),
     ]).start();
-  }, []);
+  }, [delay, opacity, rotate, y]);
 
-  const spin = rotate.interpolate({ inputRange: [0, 5], outputRange: ['0deg', '1800deg'] });
-  const size = 8 + Math.random() * 10;
+  const spin = useMemo(() => rotate.interpolate({ inputRange: [0, 5], outputRange: ['0deg', '1800deg'] }), [rotate]);
 
   return (
     <Animated.View style={{
       position: 'absolute', top: 0, width: size, height: size,
-      backgroundColor: color, borderRadius: Math.random() > 0.5 ? size / 2 : 2,
+      backgroundColor: color, borderRadius,
       transform: [{ translateY: y }, { rotate: spin }],
-      left: Math.random() * width,
+      left,
       opacity,
     }} />
   );
@@ -46,15 +54,15 @@ const Particle = ({ color, delay }) => {
 const CONFETTI_COLORS = ['#FF6B35', '#FFD700', '#2ED573', '#3742FA', '#FF4757', '#A855F7', '#FF69B4'];
 
 export default function ResultsScreen({ navigation, route }) {
-  const { winnerId, players, game, code, user, isLocal } = route.params;
+  const { winnerId, players, game, user, isLocal } = route.params;
   const winner = players.find((p) => p.uid === winnerId);
   const winnerIndex = players.findIndex((p) => p.uid === winnerId);
   const winnerColor = PLAYER_COLORS[winnerIndex + 1];
   const isWinner = isLocal || winnerId === user.uid;
 
-  const scale = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const crown = useRef(new Animated.Value(-30)).current;
+  const scale = useMemo(() => new Animated.Value(0), []);
+  const opacity = useMemo(() => new Animated.Value(0), []);
+  const crown = useMemo(() => new Animated.Value(-30), []);
 
   useEffect(() => {
     Animated.parallel([
@@ -62,7 +70,7 @@ export default function ResultsScreen({ navigation, route }) {
       Animated.timing(opacity, { toValue: 1, duration: 500, delay: 200, useNativeDriver: false }),
       Animated.spring(crown, { toValue: 0, tension: 60, friction: 7, delay: 500, useNativeDriver: false }),
     ]).start();
-  }, []);
+  }, [crown, opacity, scale]);
 
   const leaderboard = [...players].sort((a, b) => {
     if (a.uid === winnerId) return -1;
@@ -96,7 +104,10 @@ export default function ResultsScreen({ navigation, route }) {
           <Text style={[styles.winnerName, { color: winnerColor?.primary || COLORS.accent }]}>
             {winner?.name || 'Player'}
           </Text>
-          <Text style={styles.gameLabel}>{game.emoji} {game.title}</Text>
+          <View style={styles.gameLabelRow}>
+            <GameGlyph gameId={game.id} size={28} />
+            <Text style={styles.gameLabel}>{game.title}</Text>
+          </View>
         </Animated.View>
 
         {/* Podium */}
@@ -120,12 +131,18 @@ export default function ResultsScreen({ navigation, route }) {
         {/* Actions */}
         <View style={styles.actions}>
           <TouchableOpacity style={styles.playAgainBtn}
-            onPress={() => navigation.navigate('Lobby', { game, user })}>
-            <Text style={styles.playAgainText}>🔄 Play Again</Text>
+            onPress={() => {
+              tapFeedback();
+              navigation.navigate('Lobby', { game, user });
+            }}>
+            <Text style={styles.playAgainText}>Play Again</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.homeBtn}
-            onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.homeBtnText}>🏠 Home</Text>
+            onPress={() => {
+              tapFeedback();
+              navigation.navigate('Home');
+            }}>
+            <Text style={styles.homeBtnText}>Home</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -144,6 +161,7 @@ const styles = StyleSheet.create({
   },
   resultLabel: { fontFamily: FONTS.heading, fontSize: SIZES.fontXxl, color: COLORS.textPrimary },
   winnerName: { fontFamily: FONTS.heading, fontSize: SIZES.fontXxl },
+  gameLabelRow: { flexDirection: 'row', alignItems: 'center', gap: SIZES.xs },
   gameLabel: { fontFamily: FONTS.bodyRegular, fontSize: SIZES.fontMd, color: COLORS.textSecondary },
   podium: {
     width: '100%', backgroundColor: COLORS.bgCard, borderRadius: SIZES.radiusXl,

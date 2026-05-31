@@ -1,22 +1,20 @@
 // Emoji Reactions Bar — In-game quick reactions
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, ScrollView } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, TouchableOpacity, StyleSheet, Animated, ScrollView } from 'react-native';
 import { COLORS, SIZES } from '../config/theme';
 import { sendReaction } from '../services/rooms';
 
 const EMOJIS = ['👍', '🎲', '🎉', '😭', '🔥', '😂', '👏', '💀'];
 
 export default function ReactionsBar({ roomCode, uid }) {
-  const [lastSent, setLastSent] = useState(null);
-  const scaleAnims = useRef(EMOJIS.map(() => new Animated.Value(1))).current;
+  const scaleAnims = useMemo(() => EMOJIS.map(() => new Animated.Value(1)), []);
 
   const handleReact = async (emoji, idx) => {
-    setLastSent(emoji);
     Animated.sequence([
       Animated.timing(scaleAnims[idx], { toValue: 1.5, duration: 100, useNativeDriver: true }),
       Animated.timing(scaleAnims[idx], { toValue: 1, duration: 100, useNativeDriver: true }),
     ]).start();
-    try { await sendReaction(roomCode, uid, emoji); } catch (e) {}
+    try { await sendReaction(roomCode, uid, emoji); } catch (_e) {}
   };
 
   return (
