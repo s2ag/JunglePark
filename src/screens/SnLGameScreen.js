@@ -11,6 +11,7 @@ import SnLBoard from '../components/snl/SnLBoard';
 import Dice from '../components/Dice';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
+import { diceRollFeedback, snakeFeedback, ladderFeedback, winFeedback } from '../services/feedback';
 
 export default function SnLGameScreen({ navigation, route }) {
   const { code, user, players, isLocal } = route.params;
@@ -72,9 +73,15 @@ export default function SnLGameScreen({ navigation, route }) {
 
       const newState = movePlayer(gameState, activeUid, gameState.diceValue);
 
-      if (isLocal && newState.lastEvent) showEvent(newState.lastEvent);
+      if (isLocal && newState.lastEvent) {
+        showEvent(newState.lastEvent);
+        // Contextual haptics for snake/ladder events
+        if (newState.lastEvent.type === 'snake') snakeFeedback();
+        else if (newState.lastEvent.type === 'ladder') ladderFeedback();
+      }
 
       if (newState.winner) {
+        winFeedback();
         if (isLocal) {
           navigation.replace('Results', {
             winnerId: newState.winner,
@@ -126,6 +133,7 @@ export default function SnLGameScreen({ navigation, route }) {
   // ── Roll dice ─────────────────────────────────────────────────────────────
   const handleRoll = async () => {
     if (!isMyTurn || rolling || !gameState || gameState.diceRolled) return;
+    diceRollFeedback();
     setRolling(true);
 
     const value = rollDiceSnL();

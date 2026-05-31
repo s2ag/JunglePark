@@ -13,7 +13,7 @@ import LudoBoard from '../components/ludo/LudoBoard';
 import Dice from '../components/Dice';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
-import { tapFeedback, successFeedback } from '../services/feedback';
+import { tapFeedback, successFeedback, diceRollFeedback, moveFeedback } from '../services/feedback';
 
 const { width } = Dimensions.get('window');
 
@@ -78,7 +78,7 @@ export default function LudoGameScreen({ navigation, route }) {
 
   const handleRoll = async () => {
     if (!isMyTurn || rolling || !gameState || gameState.diceRolled) return;
-    tapFeedback();
+    diceRollFeedback();
     setRolling(true);
     const value = rollDice();
     const activeUid = isLocal ? currentPlayerUid : user.uid;
@@ -110,7 +110,7 @@ export default function LudoGameScreen({ navigation, route }) {
 
   const handleTokenPress = async (tokenId) => {
     if (!isMyTurn || !gameState || !gameState.diceRolled) return;
-    tapFeedback();
+    moveFeedback();
     const activeUid = isLocal ? currentPlayerUid : user.uid;
     const movable = getMovableTokens(gameState, activeUid, gameState.diceValue);
     if (!movable.find((t) => t.id === tokenId)) return;

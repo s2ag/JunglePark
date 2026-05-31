@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions,
 } from 'react-native';
 import { COLORS, SIZES, SHADOWS } from '../config/theme';
-import { tapFeedback } from '../services/feedback';
+import { tapFeedback, diceRollFeedback } from '../services/feedback';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -79,7 +79,7 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
 
   const shake = () => {
     if (disabled || !isMyTurn) return;
-    tapFeedback();
+    diceRollFeedback();
     clearTimers();
 
     // Step delays in ms — fast start, decelerates to a stop (like a real tumbling die)

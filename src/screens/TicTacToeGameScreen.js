@@ -1,14 +1,15 @@
-// TicTacToeGameScreen — Full multiplayer Tic Tac Toe
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+// TicTacToeGameScreen — Full multiplayer Tic Tac Toe with premium visuals
+import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Animated, Alert, Dimensions,
+  Animated, Alert, Dimensions, Easing,
 } from 'react-native';
 import { COLORS, SIZES, FONTS, SHADOWS } from '../config/theme';
 import { listenToRoom, updateGameState, finishGame } from '../services/rooms';
 import { makeMove, createInitialTTTState, normalizeState } from '../game/ttt/TicTacToeEngine';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
+import { ScreenTransition } from '../components/ui/AnimatedComponents';
 
 const { width } = Dimensions.get('window');
 const BOARD_SIZE = Math.min(width - 48, 340);
@@ -18,20 +19,28 @@ const CELL_SIZE = (BOARD_SIZE - 4) / 3;
 const SYMBOLS = ['✕', '○'];
 const SYMBOL_COLORS = [COLORS.primary, COLORS.accent];
 
-// ─── Animated Cell ────────────────────────────────────────────────────────────
-function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
+// ─── Animated Cell — native driver optimized for 60fps ─────────────────────────
+const Cell = memo(function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
   const loopRef = useRef(null);
 
   useEffect(() => {
     if (value) {
       scaleAnim.setValue(0.2);
-      Animated.spring(scaleAnim, {
-        toValue: 1, tension: 160, friction: 6, useNativeDriver: true,
-      }).start();
+      rotateAnim.setValue(0);
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1, tension: 180, friction: 6, useNativeDriver: true,
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: 1, duration: 300, easing: Easing.out(Easing.back(1.5)), useNativeDriver: true,
+        }),
+      ]).start();
     } else {
       scaleAnim.setValue(0);
+      rotateAnim.setValue(0);
     }
   }, [value]);
 
@@ -43,8 +52,8 @@ function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
     if (isWinCell) {
       loopRef.current = Animated.loop(
         Animated.sequence([
-          Animated.timing(glowOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
-          Animated.timing(glowOpacity, { toValue: 0.2, duration: 380, useNativeDriver: true }),
+          Animated.timing(glowOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
+          Animated.timing(glowOpacity, { toValue: 0.15, duration: 450, useNativeDriver: true }),
         ])
       );
       loopRef.current.start();
@@ -59,6 +68,11 @@ function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
     : -1;
   const symbol = playerIdx >= 0 ? SYMBOLS[playerIdx] : null;
   const symbolColor = playerIdx >= 0 ? SYMBOL_COLORS[playerIdx] : COLORS.textMuted;
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   return (
     <TouchableOpacity
@@ -77,6 +91,10 @@ function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
           ]}
         />
       )}
+      {/* Hover/pressable hint */}
+      {canPress && !value && (
+        <View style={styles.cellHoverHint} />
+      )}
       {symbol && (
         <Animated.Text
           style={[
@@ -84,7 +102,10 @@ function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
             {
               color: symbolColor,
               fontSize: CELL_SIZE * 0.50,
-              transform: [{ scale: scaleAnim }],
+              transform: [{ scale: scaleAnim }, { rotate }],
+              textShadowColor: symbolColor,
+              textShadowOffset: { width: 0, height: 0 },
+              textShadowRadius: 12,
             },
           ]}
         >
@@ -93,7 +114,7 @@ function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
       )}
     </TouchableOpacity>
   );
-}
+});
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function TicTacToeGameScreen({ navigation, route }) {
@@ -214,6 +235,7 @@ export default function TicTacToeGameScreen({ navigation, route }) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <ScreenTransition>
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -267,15 +289,19 @@ export default function TicTacToeGameScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* Board */}
+      {/* Board — premium neon grid */}
       <View style={[styles.boardWrap, { width: BOARD_SIZE, height: BOARD_SIZE }]}>
-        {/* Grid lines */}
+        {/* Neon grid lines with glow */}
+        <View style={[styles.gridLine, styles.gridLineV, styles.gridLineGlow, { left: CELL_SIZE - 1 }]} />
         <View style={[styles.gridLine, styles.gridLineV, { left: CELL_SIZE - 1 }]} />
+        <View style={[styles.gridLine, styles.gridLineV, styles.gridLineGlow, { left: CELL_SIZE * 2 - 1 }]} />
         <View style={[styles.gridLine, styles.gridLineV, { left: CELL_SIZE * 2 - 1 }]} />
+        <View style={[styles.gridLine, styles.gridLineH, styles.gridLineGlow, { top: CELL_SIZE - 1 }]} />
         <View style={[styles.gridLine, styles.gridLineH, { top: CELL_SIZE - 1 }]} />
+        <View style={[styles.gridLine, styles.gridLineH, styles.gridLineGlow, { top: CELL_SIZE * 2 - 1 }]} />
         <View style={[styles.gridLine, styles.gridLineH, { top: CELL_SIZE * 2 - 1 }]} />
 
-        {/* Explicit rows — avoids flexWrap miscalculation with border */}
+        {/* Explicit rows */}
         {[0, 1, 2].map(row => (
           <View key={row} style={{ flexDirection: 'row' }}>
             {[0, 1, 2].map(col => {
@@ -355,6 +381,7 @@ export default function TicTacToeGameScreen({ navigation, route }) {
         )}
       </View>
     </View>
+    </ScreenTransition>
   );
 }
 
@@ -399,17 +426,29 @@ const styles = StyleSheet.create({
   },
   turnSymbol: { fontFamily: FONTS.heading, fontSize: SIZES.fontXl },
 
-  // Board
+  // Board — premium dark with subtle border glow
   boardWrap: {
     backgroundColor: COLORS.bgCard, borderRadius: SIZES.radiusXl,
-    borderWidth: 2, borderColor: COLORS.bgCardLight,
-    overflow: 'hidden', ...SHADOWS.md,
+    borderWidth: 2, borderColor: 'rgba(255,215,0,0.2)',
+    overflow: 'hidden',
+    ...SHADOWS.md,
   },
   cellsGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  winHighlight: { backgroundColor: 'rgba(255,215,0,0.28)' },
+  cellHoverHint: {
+    position: 'absolute',
+    width: '60%', height: '60%',
+    borderRadius: SIZES.radiusMd,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  winHighlight: { backgroundColor: 'rgba(255,215,0,0.3)', borderRadius: 4 },
   symbol: { fontFamily: FONTS.heading, fontWeight: 'bold' },
   gridLine: { position: 'absolute', backgroundColor: COLORS.bgCardLight },
+  gridLineGlow: {
+    backgroundColor: 'rgba(255,215,0,0.08)',
+    // Slightly wider for glow backdrop
+    zIndex: -1,
+  },
   gridLineV: { width: 2, top: 0, bottom: 0 },
   gridLineH: { height: 2, left: 0, right: 0 },
   floatReaction: {
@@ -417,10 +456,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center', top: '30%',
   },
 
-  // Result banner — centered in the middle of the screen via absolute + margin
+  // Result banner
   resultBanner: {
     position: 'absolute',
-    // sits in the flow of alignItems:'center' container — use marginTop to push down
     marginTop: BOARD_SIZE * 0.1,
     backgroundColor: COLORS.bgCard,
     borderRadius: SIZES.radiusXl,

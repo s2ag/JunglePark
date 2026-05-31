@@ -1,8 +1,9 @@
-// SnLBoard — SVG Snake & Ladders 10x10 Board
-import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+// SnLBoard — Premium SVG Snake & Ladders 10x10 Board with animated tokens
+import React, { useRef, useEffect, memo } from 'react';
+import { View, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
 import Svg, {
-  Rect, Circle, Text as SvgText, G, Line, Path, Defs, LinearGradient, Stop
+  Rect, Circle, Text as SvgText, G, Line, Path, Defs,
+  LinearGradient, Stop, RadialGradient
 } from 'react-native-svg';
 import { PLAYER_COLORS, COLORS } from '../../config/theme';
 import { squareToGrid, SNAKES, LADDERS } from '../../game/snl/SnLEngine';
@@ -17,8 +18,83 @@ const squareCenter = (sq) => {
   return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 };
 };
 
-const SNAKE_COLORS = ['#E74C3C', '#C0392B', '#E67E22', '#D35400', '#8E44AD', '#6C3483'];
-const LADDER_COLORS = ['#27AE60', '#1E8449', '#2E86C1', '#1A5276', '#F39C12', '#D68910'];
+const SNAKE_COLORS = ['#FF4757', '#E74C3C', '#FF6B35', '#D35400', '#A855F7', '#8E44AD'];
+const LADDER_COLORS = ['#2ED573', '#27AE60', '#3742FA', '#1E90FF', '#FFD700', '#FFA502'];
+
+// Animated token with smooth position transitions
+const AnimatedSnLToken = memo(function AnimatedSnLToken({ x, y, color, label, offset }) {
+  const translateX = useRef(new Animated.Value(x + offset.dx)).current;
+  const translateY = useRef(new Animated.Value(y + offset.dy)).current;
+  const bounceScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    // Animate to new position with bounce
+    Animated.parallel([
+      Animated.spring(translateX, {
+        toValue: x + offset.dx,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 10,
+      }),
+      Animated.spring(translateY, {
+        toValue: y + offset.dy,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 10,
+      }),
+    ]).start();
+
+    // Bounce scale on arrival
+    Animated.sequence([
+      Animated.timing(bounceScale, {
+        toValue: 1.3,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.spring(bounceScale, {
+        toValue: 1,
+        tension: 200,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [x, y]);
+
+  const tokenR = CELL * 0.28;
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: tokenR * 2,
+        height: tokenR * 2,
+        transform: [
+          { translateX: Animated.subtract(translateX, tokenR) },
+          { translateY: Animated.subtract(translateY, tokenR) },
+          { scale: bounceScale },
+        ],
+      }}
+    >
+      <Svg width={tokenR * 2} height={tokenR * 2}>
+        <Defs>
+          <RadialGradient id={`snl-tg-${label}`} cx="40%" cy="35%" r="60%">
+            <Stop offset="0" stopColor={color.light} />
+            <Stop offset="1" stopColor={color.primary} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={tokenR + 1} cy={tokenR + 2} r={tokenR * 0.85} fill="rgba(0,0,0,0.3)" />
+        <Circle cx={tokenR} cy={tokenR} r={tokenR * 0.9}
+          fill={`url(#snl-tg-${label})`} stroke="#fff" strokeWidth={2} />
+        <Circle cx={tokenR - tokenR * 0.2} cy={tokenR - tokenR * 0.2} r={tokenR * 0.2}
+          fill="rgba(255,255,255,0.35)" />
+        <SvgText x={tokenR} y={tokenR + 4} fontSize={8} textAnchor="middle" fill="#fff" fontWeight="bold">
+          {label}
+        </SvgText>
+      </Svg>
+    </Animated.View>
+  );
+});
 
 export default function SnLBoard({ gameState, players }) {
   return (
@@ -27,14 +103,27 @@ export default function SnLBoard({ gameState, players }) {
         <Defs>
           <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor="#134E5E" />
-            <Stop offset="1" stopColor="#1a1a2e" />
+            <Stop offset="0.5" stopColor="#1a1a2e" />
+            <Stop offset="1" stopColor="#0f3443" />
           </LinearGradient>
+          <LinearGradient id="snlBorderGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#71B280" stopOpacity="0.6" />
+            <Stop offset="1" stopColor="#134E5E" stopOpacity="0.6" />
+          </LinearGradient>
+          <RadialGradient id="snlCenterGlow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor="#71B280" stopOpacity="0.08" />
+            <Stop offset="1" stopColor="#71B280" stopOpacity="0" />
+          </RadialGradient>
         </Defs>
 
         {/* Background */}
-        <Rect x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} fill="url(#bg)" rx={12} />
+        <Rect x={0} y={0} width={BOARD_SIZE} height={BOARD_SIZE} fill="url(#bg)" rx={14} />
+        <Circle cx={BOARD_SIZE / 2} cy={BOARD_SIZE / 2} r={BOARD_SIZE * 0.35} fill="url(#snlCenterGlow)" />
+        {/* Decorative border */}
+        <Rect x={2} y={2} width={BOARD_SIZE - 4} height={BOARD_SIZE - 4}
+          fill="none" stroke="url(#snlBorderGrad)" strokeWidth={2} rx={12} />
 
-        {/* Grid cells — alternating colors */}
+        {/* Grid cells — premium alternating with subtle depth */}
         {Array.from({ length: 100 }).map((_, i) => {
           const sq = i + 1;
           const { row, col } = squareToGrid(sq);
@@ -42,17 +131,19 @@ export default function SnLBoard({ gameState, players }) {
           return (
             <G key={sq}>
               <Rect
-                x={col * CELL} y={row * CELL}
-                width={CELL} height={CELL}
-                fill={isLight ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)'}
-                stroke="rgba(255,255,255,0.1)"
+                x={col * CELL + 0.5} y={row * CELL + 0.5}
+                width={CELL - 1} height={CELL - 1}
+                fill={isLight ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.02)'}
+                stroke="rgba(255,255,255,0.08)"
                 strokeWidth={0.5}
+                rx={2}
               />
               <SvgText
-                x={col * CELL + 3}
+                x={col * CELL + 4}
                 y={row * CELL + 12}
-                fontSize={8}
-                fill="rgba(255,255,255,0.35)"
+                fontSize={7}
+                fill="rgba(255,255,255,0.3)"
+                fontWeight="bold"
               >
                 {sq}
               </SvgText>
@@ -60,81 +151,107 @@ export default function SnLBoard({ gameState, players }) {
           );
         })}
 
-        {/* START square */}
+        {/* START square — highlighted */}
         {(() => {
           const { row, col } = squareToGrid(1);
           return (
-            <Rect x={col * CELL} y={row * CELL} width={CELL} height={CELL}
-              fill="rgba(46,213,115,0.2)" stroke={COLORS.success} strokeWidth={1.5} />
+            <G>
+              <Rect x={col * CELL + 1} y={row * CELL + 1} width={CELL - 2} height={CELL - 2}
+                fill="rgba(46,213,115,0.2)" stroke={COLORS.success} strokeWidth={1.5} rx={3} />
+              <SvgText x={col * CELL + CELL / 2} y={row * CELL + CELL / 2 + 3}
+                fontSize={8} textAnchor="middle" fill={COLORS.success} fontWeight="bold">START</SvgText>
+            </G>
           );
         })()}
 
-        {/* FINISH square (100) */}
+        {/* FINISH square (100) — premium gold */}
         {(() => {
           const { row, col } = squareToGrid(100);
           return (
             <G>
-              <Rect x={col * CELL} y={row * CELL} width={CELL} height={CELL}
-                fill="rgba(255,215,0,0.25)" stroke={COLORS.accent} strokeWidth={2} />
-              <SvgText x={col * CELL + CELL / 2} y={row * CELL + CELL / 2 + 5}
-                fontSize={14} textAnchor="middle">🏆</SvgText>
+              <Rect x={col * CELL + 1} y={row * CELL + 1} width={CELL - 2} height={CELL - 2}
+                fill="rgba(255,215,0,0.2)" stroke={COLORS.accent} strokeWidth={2} rx={3} />
+              <SvgText x={col * CELL + CELL / 2} y={row * CELL + CELL / 2 + 4}
+                fontSize={10} textAnchor="middle" fill={COLORS.accent} fontWeight="bold">★</SvgText>
             </G>
           );
         })()}
 
-        {/* Snakes */}
+        {/* Snakes — styled curves with head markers */}
         {Object.entries(SNAKES).map(([head, tail], i) => {
           const h = squareCenter(parseInt(head));
           const t = squareCenter(tail);
           const color = SNAKE_COLORS[i % SNAKE_COLORS.length];
-          const mx = (h.x + t.x) / 2 + (i % 2 === 0 ? 20 : -20);
+          const mx = (h.x + t.x) / 2 + (i % 2 === 0 ? 22 : -22);
           const my = (h.y + t.y) / 2;
           return (
             <G key={`snake${head}`}>
+              {/* Snake body shadow */}
+              <Path
+                d={`M${h.x + 1},${h.y + 2} Q${mx + 1},${my + 2} ${t.x + 1},${t.y + 2}`}
+                stroke="rgba(0,0,0,0.3)" strokeWidth={7} fill="none" strokeLinecap="round"
+              />
+              {/* Snake body */}
               <Path
                 d={`M${h.x},${h.y} Q${mx},${my} ${t.x},${t.y}`}
-                stroke={color} strokeWidth={5} fill="none" strokeLinecap="round" opacity={0.85}
+                stroke={color} strokeWidth={6} fill="none" strokeLinecap="round" opacity={0.9}
               />
+              {/* Snake body highlight */}
               <Path
                 d={`M${h.x},${h.y} Q${mx},${my} ${t.x},${t.y}`}
                 stroke="rgba(255,255,255,0.2)" strokeWidth={2} fill="none" strokeLinecap="round"
               />
-              <SvgText x={h.x} y={h.y + 5} fontSize={14} textAnchor="middle">🐍</SvgText>
+              {/* Snake head dot */}
+              <Circle cx={h.x} cy={h.y} r={5} fill={color} stroke="#fff" strokeWidth={1.5} />
+              {/* Snake eyes */}
+              <Circle cx={h.x - 2} cy={h.y - 1} r={1.5} fill="#fff" />
+              <Circle cx={h.x + 2} cy={h.y - 1} r={1.5} fill="#fff" />
+              <Circle cx={h.x - 2} cy={h.y - 1} r={0.7} fill="#000" />
+              <Circle cx={h.x + 2} cy={h.y - 1} r={0.7} fill="#000" />
             </G>
           );
         })}
 
-        {/* Ladders */}
+        {/* Ladders — premium styled with wood-tone colors */}
         {Object.entries(LADDERS).map(([bottom, top], i) => {
           const b = squareCenter(parseInt(bottom));
           const t = squareCenter(top);
           const color = LADDER_COLORS[i % LADDER_COLORS.length];
           const angle = Math.atan2(t.y - b.y, t.x - b.x);
-          const perp = { x: Math.sin(angle) * 6, y: -Math.cos(angle) * 6 };
+          const perp = { x: Math.sin(angle) * 7, y: -Math.cos(angle) * 7 };
           return (
             <G key={`lad${bottom}`}>
+              {/* Rail shadow */}
+              <Line x1={b.x - perp.x + 1} y1={b.y - perp.y + 2} x2={t.x - perp.x + 1} y2={t.y - perp.y + 2}
+                stroke="rgba(0,0,0,0.25)" strokeWidth={4.5} strokeLinecap="round" />
+              <Line x1={b.x + perp.x + 1} y1={b.y + perp.y + 2} x2={t.x + perp.x + 1} y2={t.y + perp.y + 2}
+                stroke="rgba(0,0,0,0.25)" strokeWidth={4.5} strokeLinecap="round" />
               {/* Left rail */}
               <Line x1={b.x - perp.x} y1={b.y - perp.y} x2={t.x - perp.x} y2={t.y - perp.y}
-                stroke={color} strokeWidth={3.5} strokeLinecap="round" opacity={0.85} />
+                stroke={color} strokeWidth={4} strokeLinecap="round" opacity={0.9} />
               {/* Right rail */}
               <Line x1={b.x + perp.x} y1={b.y + perp.y} x2={t.x + perp.x} y2={t.y + perp.y}
-                stroke={color} strokeWidth={3.5} strokeLinecap="round" opacity={0.85} />
+                stroke={color} strokeWidth={4} strokeLinecap="round" opacity={0.9} />
               {/* Rungs */}
-              {Array.from({ length: 4 }).map((_, r) => {
-                const frac = (r + 1) / 5;
+              {Array.from({ length: 5 }).map((_, r) => {
+                const frac = (r + 1) / 6;
                 const rx = b.x + (t.x - b.x) * frac;
                 const ry = b.y + (t.y - b.y) * frac;
                 return (
                   <Line key={r} x1={rx - perp.x} y1={ry - perp.y} x2={rx + perp.x} y2={ry + perp.y}
-                    stroke={color} strokeWidth={2.5} strokeLinecap="round" opacity={0.7} />
+                    stroke={color} strokeWidth={3} strokeLinecap="round" opacity={0.75} />
                 );
               })}
-              <SvgText x={b.x} y={b.y + 5} fontSize={12} textAnchor="middle">🪜</SvgText>
+              {/* Arrow indicator at top */}
+              <Circle cx={t.x} cy={t.y} r={4} fill={color} opacity={0.7} />
             </G>
           );
         })}
+      </Svg>
 
-        {/* Player tokens */}
+      {/* Animated token overlay (native driver for 60fps) */}
+      <View style={[StyleSheet.absoluteFillObject, { width: BOARD_SIZE, height: BOARD_SIZE }]}
+        pointerEvents="none">
         {gameState && players && players.map((p, pi) => {
           const pos = gameState.positions?.[p.uid];
           if (!pos || pos === 0) return null;
@@ -147,22 +264,17 @@ export default function SnLBoard({ gameState, players }) {
             { dx: CELL * 0.2, dy: CELL * 0.2 },
           ][pi];
           return (
-            <G key={p.uid}>
-              <Circle
-                cx={x + offset.dx} cy={y + offset.dy}
-                r={CELL * 0.28}
-                fill={color.primary} stroke="#fff" strokeWidth={2}
-              />
-              <SvgText
-                x={x + offset.dx} y={y + offset.dy + 4}
-                fontSize={8} textAnchor="middle" fill="#fff" fontWeight="bold"
-              >
-                {pi + 1}
-              </SvgText>
-            </G>
+            <AnimatedSnLToken
+              key={p.uid}
+              x={x}
+              y={y}
+              color={color}
+              label={pi + 1}
+              offset={offset}
+            />
           );
         })}
-      </Svg>
+      </View>
     </View>
   );
 }
