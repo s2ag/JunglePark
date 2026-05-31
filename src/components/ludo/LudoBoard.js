@@ -1,11 +1,11 @@
 // LudoBoard — Premium SVG-based Ludo board with 60fps native-driver token animations
-import React, { useRef, useEffect, memo } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import { View, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
 import Svg, {
   Rect, Circle, Text as SvgText, G, Polygon, Defs,
   LinearGradient, Stop, RadialGradient
 } from 'react-native-svg';
-import { PLAYER_COLORS, COLORS } from '../../config/theme';
+import { PLAYER_COLORS } from '../../config/theme';
 import { getBoardSquare } from '../../game/ludo/LudoEngine';
 
 const { width } = Dimensions.get('window');
@@ -131,10 +131,10 @@ const getTokenCoords = (playerIndex, tokenId, position) => {
 // Animated token — uses native driver (translateX/Y + scale) for 60fps on Android
 const AnimatedToken = memo(function AnimatedToken({ item, onPress }) {
   // Use translateX/Y so we can enable useNativeDriver: true
-  const translateX = useRef(new Animated.Value(item.x)).current;
-  const translateY = useRef(new Animated.Value(item.y)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
+  const [translateX] = useState(() => new Animated.Value(item.x));
+  const [translateY] = useState(() => new Animated.Value(item.y));
+  const scaleAnim = useMemo(() => new Animated.Value(1), []);
+  const glowOpacity = useMemo(() => new Animated.Value(0), []);
 
   // Animate to new position (spring with native driver)
   useEffect(() => {
@@ -152,7 +152,7 @@ const AnimatedToken = memo(function AnimatedToken({ item, onPress }) {
         friction: 12,
       }),
     ]).start();
-  }, [item.x, item.y]);
+  }, [item.x, item.y, translateX, translateY]);
 
   // Pulse loop for movable tokens (scale + glow, native driver)
   useEffect(() => {
@@ -194,7 +194,7 @@ const AnimatedToken = memo(function AnimatedToken({ item, onPress }) {
       glowOpacity.setValue(0);
     }
     return () => loop && loop.stop();
-  }, [item.isMovable]);
+  }, [glowOpacity, item.isMovable, scaleAnim]);
 
   const tokenR = S * 0.38;
   const color = PLAYER_COLORS[item.playerIndex].primary;

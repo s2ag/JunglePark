@@ -1,6 +1,6 @@
 // AnimatedComponents — Reusable, 60fps-optimized animation primitives
 // All animations use useNativeDriver: true for Android performance
-import React, { useRef, useEffect, memo } from 'react';
+import React, { useMemo, useEffect, memo } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
 import { COLORS } from '../../config/theme';
 
@@ -16,7 +16,7 @@ export const PulseGlow = memo(function PulseGlow({
   intensity = 0.6,
   duration = 1200,
 }) {
-  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
     if (!active) {
@@ -41,7 +41,7 @@ export const PulseGlow = memo(function PulseGlow({
     );
     loop.start();
     return () => loop.stop();
-  }, [active, duration]);
+  }, [active, duration, pulseAnim]);
 
   const scale = pulseAnim.interpolate({
     inputRange: [0, 1],
@@ -84,7 +84,7 @@ export const FadeInScale = memo(function FadeInScale({
   duration = 400,
   style,
 }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const anim = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
     Animated.timing(anim, {
@@ -94,7 +94,7 @@ export const FadeInScale = memo(function FadeInScale({
       easing: Easing.out(Easing.back(1.5)),
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [anim, delay, duration]);
 
   const opacity = anim;
   const scale = anim.interpolate({
@@ -119,7 +119,7 @@ export const FloatingElement = memo(function FloatingElement({
   duration = 2500,
   style,
 }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const anim = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -140,7 +140,7 @@ export const FloatingElement = memo(function FloatingElement({
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [anim, duration]);
 
   const translateY = anim.interpolate({
     inputRange: [0, 1],
@@ -161,8 +161,8 @@ export const ScreenTransition = memo(function ScreenTransition({
   children,
   style,
 }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(30)).current;
+  const opacity = useMemo(() => new Animated.Value(0), []);
+  const translateY = useMemo(() => new Animated.Value(30), []);
 
   useEffect(() => {
     Animated.parallel([
@@ -179,7 +179,7 @@ export const ScreenTransition = memo(function ScreenTransition({
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [opacity, translateY]);
 
   return (
     <Animated.View style={[{ flex: 1, opacity, transform: [{ translateY }] }, style]}>
@@ -199,9 +199,10 @@ export const ParticleEffect = memo(function ParticleEffect({
   origin = { x: 0, y: 0 },
   radius = 100,
 }) {
-  const anims = useRef(
-    Array.from({ length: count }, () => new Animated.Value(0))
-  ).current;
+  const anims = useMemo(
+    () => Array.from({ length: count }, () => new Animated.Value(0)),
+    [count]
+  );
 
   useEffect(() => {
     if (!active) {
@@ -219,7 +220,7 @@ export const ParticleEffect = memo(function ParticleEffect({
         })
       )
     ).start();
-  }, [active]);
+  }, [active, anims]);
 
   if (!active) return null;
 

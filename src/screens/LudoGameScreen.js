@@ -1,8 +1,8 @@
 // LudoGameScreen — Full multiplayer Ludo game
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Animated, Alert, Dimensions
+  ScrollView, Animated, Alert
 } from 'react-native';
 import { COLORS, SIZES, FONTS, SHADOWS, PLAYER_COLORS } from '../config/theme';
 import { listenToRoom, updateGameState, finishGame } from '../services/rooms';
@@ -13,53 +13,20 @@ import LudoBoard from '../components/ludo/LudoBoard';
 import Dice from '../components/Dice';
 import PlayerAvatar from '../components/PlayerAvatar';
 import ReactionsBar from '../components/ReactionsBar';
-import { tapFeedback, successFeedback, diceRollFeedback, moveFeedback } from '../services/feedback';
-
-const { width } = Dimensions.get('window');
+import { successFeedback, diceRollFeedback, moveFeedback } from '../services/feedback';
 
 export default function LudoGameScreen({ navigation, route }) {
   const { code, user, players, isLocal } = route.params;
-  const [room, setRoom] = useState(null);
-  const [gameState, setGameState] = useState(null);
+  const [gameState, setGameState] = useState(() => (isLocal ? createInitialLudoState(players) : null));
   const [rolling, setRolling] = useState(false);
   const [reaction, setReaction] = useState(null);
-  const reactionOpacity = useRef(new Animated.Value(0)).current;
+  const reactionOpacity = useMemo(() => new Animated.Value(0), []);
 
-  const myPlayerIndex = players.findIndex((p) => p.uid === user.uid);
   const isMyTurn = isLocal
     ? true
     : (gameState ? gameState.playerOrder[gameState.currentPlayerIndex] === user.uid : false);
 
-  useEffect(() => {
-    if (isLocal) {
-      const initialState = createInitialLudoState(players);
-      setGameState(initialState);
-    } else {
-      const unsub = listenToRoom(code, (data) => {
-        if (!data) return;
-        setRoom(data);
-        if (data.gameState) setGameState(data.gameState);
-        if (data.status === 'finished') {
-          navigation.replace('Results', {
-            winnerId: data.winnerId,
-            players,
-            game: { id: 'ludo', title: 'Ludo', emoji: '🎲' },
-            code,
-            user,
-          });
-        }
-        // Show incoming reactions
-        if (data.reactions) {
-          const all = Object.values(data.reactions);
-          const latest = all[all.length - 1];
-          if (latest && latest.uid !== user.uid) showReaction(latest.emoji);
-        }
-      });
-      return unsub;
-    }
-  }, [code, isLocal]);
-
-  const showReaction = (emoji) => {
+  const showReaction = useCallback((emoji) => {
     setReaction(emoji);
     reactionOpacity.setValue(0);
     Animated.sequence([
@@ -67,7 +34,33 @@ export default function LudoGameScreen({ navigation, route }) {
       Animated.delay(1500),
       Animated.timing(reactionOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start(() => setReaction(null));
-  };
+  }, [reactionOpacity]);
+
+  useEffect(() => {
+    if (isLocal) return undefined;
+
+    const unsub = listenToRoom(code, (data) => {
+      if (!data) return;
+      if (data.gameState) setGameState(data.gameState);
+      if (data.status === 'finished') {
+        navigation.replace('Results', {
+          winnerId: data.winnerId,
+          players,
+          game: { id: 'ludo', title: 'Ludo', emoji: '🎲' },
+          code,
+          user,
+        });
+      }
+      // Show incoming reactions
+      if (data.reactions) {
+        const all = Object.values(data.reactions);
+        const latest = all[all.length - 1];
+        if (latest && latest.uid !== user.uid) showReaction(latest.emoji);
+      }
+    });
+
+    return unsub;
+  }, [code, isLocal, navigation, players, showReaction, user]);
 
   const currentPlayerUid = gameState?.playerOrder?.[gameState?.currentPlayerIndex];
   const currentPlayer = players.find((p) => p.uid === currentPlayerUid);

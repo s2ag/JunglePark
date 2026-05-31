@@ -1,5 +1,5 @@
 // WaitingRoomScreen — Real-time player lobby before game starts
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Animated, Share, Alert, ActivityIndicator
@@ -14,7 +14,7 @@ import GameGlyph from '../components/ui/GameGlyph';
 import { tapFeedback } from '../services/feedback';
 
 const PulseDot = () => {
-  const pulse = useRef(new Animated.Value(1)).current;
+  const pulse = useMemo(() => new Animated.Value(1), []);
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -22,7 +22,7 @@ const PulseDot = () => {
         Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
       ])
     ).start();
-  }, []);
+  }, [pulse]);
   return <Animated.View style={[styles.dot, { transform: [{ scale: pulse }] }]} />;
 };
 
@@ -49,7 +49,7 @@ export default function WaitingRoomScreen({ navigation, route }) {
       }
     });
     return unsub;
-  }, [code]);
+  }, [code, game.id, navigation, user]);
 
   const handleShare = async () => {
     await Share.share({

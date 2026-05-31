@@ -10,7 +10,6 @@ import {
   off,
   remove,
   push,
-  serverTimestamp,
 } from 'firebase/database';
 import { rtdb } from '../config/firebase';
 

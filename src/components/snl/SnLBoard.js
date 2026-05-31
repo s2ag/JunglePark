@@ -1,6 +1,6 @@
 // SnLBoard — Premium SVG Snake & Ladders 10x10 Board with animated tokens
-import React, { useRef, useEffect, memo } from 'react';
-import { View, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
+import React, { useState, useMemo, useEffect, memo } from 'react';
+import { View, StyleSheet, Dimensions, Animated } from 'react-native';
 import Svg, {
   Rect, Circle, Text as SvgText, G, Line, Path, Defs,
   LinearGradient, Stop, RadialGradient
@@ -23,9 +23,9 @@ const LADDER_COLORS = ['#2ED573', '#27AE60', '#3742FA', '#1E90FF', '#FFD700', '#
 
 // Animated token with smooth position transitions
 const AnimatedSnLToken = memo(function AnimatedSnLToken({ x, y, color, label, offset }) {
-  const translateX = useRef(new Animated.Value(x + offset.dx)).current;
-  const translateY = useRef(new Animated.Value(y + offset.dy)).current;
-  const bounceScale = useRef(new Animated.Value(1)).current;
+  const [translateX] = useState(() => new Animated.Value(x + offset.dx));
+  const [translateY] = useState(() => new Animated.Value(y + offset.dy));
+  const bounceScale = useMemo(() => new Animated.Value(1), []);
 
   useEffect(() => {
     // Animate to new position with bounce
@@ -58,7 +58,7 @@ const AnimatedSnLToken = memo(function AnimatedSnLToken({ x, y, color, label, of
         useNativeDriver: true,
       }),
     ]).start();
-  }, [x, y]);
+  }, [bounceScale, offset.dx, offset.dy, translateX, translateY, x, y]);
 
   const tokenR = CELL * 0.28;
   return (

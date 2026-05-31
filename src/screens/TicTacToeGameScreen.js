@@ -1,5 +1,5 @@
 // TicTacToeGameScreen — Full multiplayer Tic Tac Toe with premium visuals
-import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Animated, Alert, Dimensions, Easing,
@@ -21,9 +21,9 @@ const SYMBOL_COLORS = [COLORS.primary, COLORS.accent];
 
 // ─── Animated Cell — native driver optimized for 60fps ─────────────────────────
 const Cell = memo(function Cell({ value, index, playerOrder, onPress, canPress, isWinCell }) {
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useMemo(() => new Animated.Value(0), []);
+  const rotateAnim = useMemo(() => new Animated.Value(0), []);
+  const glowOpacity = useMemo(() => new Animated.Value(0), []);
   const loopRef = useRef(null);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ const Cell = memo(function Cell({ value, index, playerOrder, onPress, canPress, 
       scaleAnim.setValue(0);
       rotateAnim.setValue(0);
     }
-  }, [value]);
+  }, [rotateAnim, scaleAnim, value]);
 
   useEffect(() => {
     if (loopRef.current) {
@@ -61,7 +61,7 @@ const Cell = memo(function Cell({ value, index, playerOrder, onPress, canPress, 
       glowOpacity.setValue(0);
     }
     return () => { if (loopRef.current) loopRef.current.stop(); };
-  }, [isWinCell]);
+  }, [glowOpacity, isWinCell]);
 
   const playerIdx = value && Array.isArray(playerOrder)
     ? playerOrder.indexOf(value)
@@ -119,13 +119,13 @@ const Cell = memo(function Cell({ value, index, playerOrder, onPress, canPress, 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function TicTacToeGameScreen({ navigation, route }) {
   const { code, user, players, isLocal } = route.params;
-  const [gameState, setGameState] = useState(null);
+  const [gameState, setGameState] = useState(() => (isLocal ? createInitialTTTState(players) : null));
   const [reaction, setReaction] = useState(null);
-  const reactionOpacity = useRef(new Animated.Value(0)).current;
+  const reactionOpacity = useMemo(() => new Animated.Value(0), []);
 
   // Banner animation values
-  const resultScale   = useRef(new Animated.Value(0.4)).current;
-  const resultOpacity = useRef(new Animated.Value(0)).current;
+  const resultScale = useMemo(() => new Animated.Value(0.4), []);
+  const resultOpacity = useMemo(() => new Animated.Value(0), []);
 
   // ── Normalise state before any read (Firebase array→object fix) ──────────
   const gs = normalizeState(gameState);
@@ -138,32 +138,41 @@ export default function TicTacToeGameScreen({ navigation, route }) {
     ? true
     : (gs ? currentPlayerUid === user.uid : false);
 
+  const showReaction = useCallback((emoji) => {
+    setReaction(emoji);
+    reactionOpacity.setValue(0);
+    Animated.sequence([
+      Animated.timing(reactionOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(reactionOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start(() => setReaction(null));
+  }, [reactionOpacity]);
+
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isLocal) {
-      setGameState(createInitialTTTState(players));
-    } else {
-      const unsub = listenToRoom(code, (data) => {
-        if (!data) return;
-        if (data.gameState) setGameState(data.gameState);  // raw; normalised on read
-        if (data.status === 'finished') {
-          navigation.replace('Results', {
-            winnerId: data.winnerId,
-            players,
-            game: { id: 'ttt', title: 'Tic Tac Toe', emoji: '✖️' },
-            code,
-            user,
-          });
-        }
-        if (data.reactions) {
-          const all = Object.values(data.reactions);
-          const latest = all[all.length - 1];
-          if (latest && latest.uid !== user.uid) showReaction(latest.emoji);
-        }
-      });
-      return unsub;
-    }
-  }, [code, isLocal]);
+    if (isLocal) return undefined;
+
+    const unsub = listenToRoom(code, (data) => {
+      if (!data) return;
+      if (data.gameState) setGameState(data.gameState);  // raw; normalised on read
+      if (data.status === 'finished') {
+        navigation.replace('Results', {
+          winnerId: data.winnerId,
+          players,
+          game: { id: 'ttt', title: 'Tic Tac Toe', emoji: '✖️' },
+          code,
+          user,
+        });
+      }
+      if (data.reactions) {
+        const all = Object.values(data.reactions);
+        const latest = all[all.length - 1];
+        if (latest && latest.uid !== user.uid) showReaction(latest.emoji);
+      }
+    });
+
+    return unsub;
+  }, [code, isLocal, navigation, players, showReaction, user]);
 
   // ── Animate result banner whenever phase flips to 'finished' ─────────────
   const prevPhase = useRef(null);
@@ -182,17 +191,7 @@ export default function TicTacToeGameScreen({ navigation, route }) {
       }
     }
     prevPhase.current = gs?.phase ?? null;
-  }, [gs?.phase]);
-
-  const showReaction = (emoji) => {
-    setReaction(emoji);
-    reactionOpacity.setValue(0);
-    Animated.sequence([
-      Animated.timing(reactionOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(1500),
-      Animated.timing(reactionOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start(() => setReaction(null));
-  };
+  }, [code, gs?.phase, gs?.winner, isLocal, resultOpacity, resultScale]);
 
   // ── Handle cell tap ───────────────────────────────────────────────────────
   const handleCellPress = useCallback(async (cellIndex) => {
@@ -340,7 +339,7 @@ export default function TicTacToeGameScreen({ navigation, route }) {
           {gs.draw ? (
             <>
               <Text style={styles.resultEmoji}>🤝</Text>
-              <Text style={styles.resultTitle}>It's a Draw!</Text>
+              <Text style={styles.resultTitle}>It{"'"}s a Draw!</Text>
               <Text style={styles.resultSub}>Well played!</Text>
             </>
           ) : (

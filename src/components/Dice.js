@@ -1,10 +1,10 @@
 // Animated 2D Dice Component — step-by-step tumbling roll
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions,
 } from 'react-native';
 import { COLORS, SIZES, SHADOWS } from '../config/theme';
-import { tapFeedback, diceRollFeedback } from '../services/feedback';
+import { diceRollFeedback } from '../services/feedback';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -54,28 +54,42 @@ function DiceFace({ value, size }) {
 
 export default function Dice({ value, onRoll, disabled, isMyTurn }) {
   // Persist the last real value so dice never goes blank
-  const lastValueRef = useRef(null);
-  if (value) lastValueRef.current = value;
+  const [lastValue, setLastValue] = useState(null);
 
   // cycleValue: the face shown during the step animation
   const [cycleValue, setCycleValue] = useState(null);
   const timersRef = useRef([]);
 
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const shakeAnim = useMemo(() => new Animated.Value(0), []);
+  const scaleAnim = useMemo(() => new Animated.Value(1), []);
+
+  // Update lastValue when value changes
+  useEffect(() => {
+    if (!value) return undefined;
+
+    const timeoutId = setTimeout(() => {
+      setLastValue(value);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [value]);
+
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current = [];
+  }, []);
 
   // When the real value arrives from parent after onRoll, stop cycling
   useEffect(() => {
-    if (value) {
-      clearTimers();
-      setCycleValue(null);
-    }
-  }, [value]);
+    if (!value) return undefined;
 
-  const clearTimers = () => {
-    timersRef.current.forEach((t) => clearTimeout(t));
-    timersRef.current = [];
-  };
+    clearTimers();
+    const timeoutId = setTimeout(() => {
+      setCycleValue(null);
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [value, clearTimers]);
 
   const shake = () => {
     if (disabled || !isMyTurn) return;
@@ -124,7 +138,7 @@ export default function Dice({ value, onRoll, disabled, isMyTurn }) {
   };
 
   // Show cycling face during animation, fall back to last real value
-  const displayValue = cycleValue ?? lastValueRef.current;
+  const displayValue = cycleValue ?? lastValue;
 
   return (
     <TouchableOpacity onPress={shake} disabled={disabled || !isMyTurn} activeOpacity={0.85}>

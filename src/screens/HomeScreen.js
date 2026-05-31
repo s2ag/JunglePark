@@ -1,10 +1,10 @@
 // HomeScreen — Game Selection Hub
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Animated, ScrollView, StatusBar, Pressable
 } from 'react-native';
-import { COLORS, SIZES, FONTS, SHADOWS } from '../config/theme';
+import { COLORS, SIZES, FONTS } from '../config/theme';
 import { signOut } from '../services/auth';
 import PlayerAvatar from '../components/PlayerAvatar';
 import GameGlyph from '../components/ui/GameGlyph';
@@ -44,8 +44,8 @@ const GAMES = [
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const GameCard = ({ game, onPress, index }) => {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useMemo(() => new Animated.Value(0.9), []);
+  const opacity = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
     Animated.parallel([
@@ -58,7 +58,7 @@ const GameCard = ({ game, onPress, index }) => {
         delay: index * 120, useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [index, opacity, scale]);
 
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.97, tension: 80, friction: 5, useNativeDriver: true }).start();

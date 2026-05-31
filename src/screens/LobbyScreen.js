@@ -1,5 +1,5 @@
 // LobbyScreen — Create or Join a Room
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Animated, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView
@@ -16,8 +16,8 @@ export default function LobbyScreen({ navigation, route }) {
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const tabAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const tabAnim = useMemo(() => new Animated.Value(0), []);
+  const slideAnim = useMemo(() => new Animated.Value(0), []);
 
   const switchTab = (t) => {
     setTab(t);
@@ -181,7 +181,7 @@ export default function LobbyScreen({ navigation, route }) {
         {/* Join Room Panel */}
         {tab === 'join' && (
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Join a Friend's Game</Text>
+            <Text style={styles.panelTitle}>Join a Friend{"'"}s Game</Text>
             <Text style={styles.label}>Room Code</Text>
             <TextInput
               style={styles.codeInput}
